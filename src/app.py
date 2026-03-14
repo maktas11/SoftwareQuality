@@ -1,4 +1,5 @@
 import datetime
+import os
 from typing import Dict, List, Optional
 
 from core import backup
@@ -55,11 +56,20 @@ def log_action(user: Dict[str, str], description: str, info: str = "", suspiciou
     append_log(user.get("username", ""), description, info, suspicious)
 
 
+def clear_screen() -> None:
+    os.system("cls" if os.name == "nt" else "clear")
+
+
+def pause() -> None:
+    prompt_text("Press Enter to continue...")
+
+
 def ensure_permission(user: Dict[str, str], permission: str) -> bool:
     if has_permission(user["role"], permission):
         return True
     log_action(user, "Unauthorized access", f"permission: {permission}", True)
     print("Unauthorized action.")
+    pause()
     return False
 
 
@@ -92,6 +102,7 @@ def is_locked_out(username: str) -> bool:
 
 
 def login() -> Optional[Dict[str, str]]:
+    clear_screen()
     print("=== Login ===")
     username = prompt_text("Username: ")
     password = prompt_password("Password: ")
@@ -234,6 +245,7 @@ def prompt_int(label: str) -> Optional[int]:
 
 def employee_menu(user: Dict[str, str]) -> None:
     while True:
+        clear_screen()
         print("\nEmployee Menu")
         print("1. Add claim")
         print("2. Update claim")
@@ -242,6 +254,7 @@ def employee_menu(user: Dict[str, str]) -> None:
         print("5. Update my password")
         print("0. Logout")
         choice = prompt_text("Choose: ")
+        clear_screen()
         if choice == "1":
             if not ensure_permission(user, "claim.add"):
                 continue
@@ -249,12 +262,14 @@ def employee_menu(user: Dict[str, str]) -> None:
             claim_id = claim_service.create_claim(user["id"], data)
             log_action(user, "New claim", f"claim_id: {claim_id}")
             print("Claim created.")
+            pause()
         elif choice == "2":
             if not ensure_permission(user, "claim.update_own"):
                 continue
             claim_id = prompt_int("Claim ID: ")
             if claim_id is None:
                 print("Invalid claim ID.")
+                pause()
                 continue
             data = prompt_claim_data()
             if claim_service.update_claim_employee(claim_id, user["id"], data):
@@ -263,12 +278,14 @@ def employee_menu(user: Dict[str, str]) -> None:
             else:
                 log_action(user, "Unauthorized claim update", f"claim_id: {claim_id}", True)
                 print("Cannot update claim.")
+            pause()
         elif choice == "3":
             if not ensure_permission(user, "claim.delete_own"):
                 continue
             claim_id = prompt_int("Claim ID: ")
             if claim_id is None:
                 print("Invalid claim ID.")
+                pause()
                 continue
             if claim_service.delete_claim_employee(claim_id, user["id"]):
                 log_action(user, "Claim deleted", f"claim_id: {claim_id}")
@@ -276,12 +293,14 @@ def employee_menu(user: Dict[str, str]) -> None:
             else:
                 log_action(user, "Unauthorized claim delete", f"claim_id: {claim_id}", True)
                 print("Cannot delete claim.")
+            pause()
         elif choice == "4":
             if not ensure_permission(user, "claim.search_own"):
                 continue
             claims = claim_service.list_claims_by_employee(user["id"])
             log_action(user, "Search claims", "scope: own")
             display_claims(claims)
+            pause()
         elif choice == "5":
             if not ensure_permission(user, "self.update_password"):
                 continue
@@ -289,15 +308,18 @@ def employee_menu(user: Dict[str, str]) -> None:
             user_service.update_password(user["id"], password)
             log_action(user, "Password updated", "")
             print("Password updated.")
+            pause()
         elif choice == "0":
             log_action(user, "Logged out", "")
             break
         else:
             print("Invalid choice.")
+            pause()
 
 
 def manager_menu(user: Dict[str, str]) -> None:
     while True:
+        clear_screen()
         print("\nManager Menu")
         print("1. Add employee")
         print("2. Update employee")
@@ -314,6 +336,7 @@ def manager_menu(user: Dict[str, str]) -> None:
         print("13. Delete my account")
         print("0. Logout")
         choice = prompt_text("Choose: ")
+        clear_screen()
 
         if choice == "1":
             if not ensure_permission(user, "user.add_employee"):
@@ -321,6 +344,7 @@ def manager_menu(user: Dict[str, str]) -> None:
             username = prompt_until_valid("Username: ", validate_username)
             if user_service.username_exists(username):
                 print("Username already exists.")
+                pause()
                 continue
             password = prompt_password_until_valid("Password: ", validate_password)
             first_name = prompt_until_valid("First name: ", validate_name)
@@ -331,6 +355,7 @@ def manager_menu(user: Dict[str, str]) -> None:
             employee_id = employee_service.create_employee(user_id, prompt_employee_data())
             log_action(user, "New employee created", f"username: {username}, employee_id: {employee_id}")
             print("Employee created.")
+            pause()
         elif choice == "2":
             if not ensure_permission(user, "user.update_employee"):
                 continue
@@ -338,14 +363,17 @@ def manager_menu(user: Dict[str, str]) -> None:
             target = user_service.get_user_by_username(username)
             if not target:
                 print("User not found.")
+                pause()
                 continue
             if target["role"] != ROLE_EMPLOYEE:
                 print("User is not an employee.")
+                pause()
                 continue
             data = prompt_employee_data()
             employee_service.update_employee(target["id"], data)
             log_action(user, "Employee updated", f"username: {username}")
             print("Employee updated.")
+            pause()
         elif choice == "3":
             if not ensure_permission(user, "user.delete_employee"):
                 continue
@@ -353,13 +381,16 @@ def manager_menu(user: Dict[str, str]) -> None:
             target = user_service.get_user_by_username(username)
             if not target:
                 print("User not found.")
+                pause()
                 continue
             if target["role"] != ROLE_EMPLOYEE:
                 print("User is not an employee.")
+                pause()
                 continue
             user_service.delete_user(target["id"])
             log_action(user, "Employee deleted", f"username: {username}")
             print("Employee deleted.")
+            pause()
         elif choice == "4":
             if not ensure_permission(user, "user.reset_employee_pw"):
                 continue
@@ -367,14 +398,17 @@ def manager_menu(user: Dict[str, str]) -> None:
             target = user_service.get_user_by_username(username)
             if not target:
                 print("User not found.")
+                pause()
                 continue
             if target["role"] != ROLE_EMPLOYEE:
                 print("User is not an employee.")
+                pause()
                 continue
             temp_pw = "Temp_" + datetime.datetime.now().strftime("%H%M%S")
             user_service.update_password(target["id"], temp_pw)
             log_action(user, "Employee password reset", f"username: {username}")
             print(f"Temporary password: {temp_pw}")
+            pause()
         elif choice == "5":
             if not ensure_permission(user, "employee.search"):
                 continue
@@ -382,12 +416,14 @@ def manager_menu(user: Dict[str, str]) -> None:
             results = employee_service.search_employees(term)
             log_action(user, "Search employees", f"term: {term}")
             display_employees(results)
+            pause()
         elif choice == "6":
             if not ensure_permission(user, "claim.modify"):
                 continue
             claim_id = prompt_int("Claim ID: ")
             if claim_id is None:
                 print("Invalid claim ID.")
+                pause()
                 continue
             project = prompt_until_valid("New project number: ", validate_project_number)
             distance = prompt_until_valid("New travel distance: ", validate_travel_distance)
@@ -397,12 +433,14 @@ def manager_menu(user: Dict[str, str]) -> None:
             else:
                 log_action(user, "Claim modify failed", f"claim_id: {claim_id}", True)
                 print("Claim not found.")
+            pause()
         elif choice == "7":
             if not ensure_permission(user, "claim.approve"):
                 continue
             claim_id = prompt_int("Claim ID: ")
             if claim_id is None:
                 print("Invalid claim ID.")
+                pause()
                 continue
             status = prompt_choice("Approve (A) or Reject (R): ", {"A": "Approved", "R": "Rejected"})
             salary_batch = ""
@@ -414,6 +452,7 @@ def manager_menu(user: Dict[str, str]) -> None:
             else:
                 log_action(user, "Claim approval failed", f"claim_id: {claim_id}", True)
                 print("Claim not found.")
+            pause()
         elif choice == "8":
             if not ensure_permission(user, "claim.search_all"):
                 continue
@@ -425,12 +464,14 @@ def manager_menu(user: Dict[str, str]) -> None:
             ]
             log_action(user, "Search claims", f"term: {term}")
             display_claims(claims)
+            pause()
         elif choice == "9":
             if not ensure_permission(user, "backup.create"):
                 continue
             name = backup.create_backup()
             log_action(user, "Backup created", f"backup: {name}")
             print(f"Backup created: {name}")
+            pause()
         elif choice == "10":
             if not ensure_permission(user, "backup.restore_with_code"):
                 continue
@@ -445,10 +486,12 @@ def manager_menu(user: Dict[str, str]) -> None:
                     print("Backup restored.")
                 else:
                     print("Backup not found.")
+            pause()
         elif choice == "11":
             if not ensure_permission(user, "log.view"):
                 continue
             handle_view_logs(user)
+            pause()
         elif choice == "12":
             if not ensure_permission(user, "self.update"):
                 continue
@@ -464,6 +507,7 @@ def manager_menu(user: Dict[str, str]) -> None:
                 employee_service.update_profile(user["id"], first_name, last_name)
                 log_action(user, "Profile updated", "")
                 print("Profile updated.")
+            pause()
         elif choice == "13":
             if not ensure_permission(user, "self.delete"):
                 continue
@@ -472,17 +516,21 @@ def manager_menu(user: Dict[str, str]) -> None:
                 user_service.delete_user(user["id"])
                 log_action(user, "Account deleted", "")
                 print("Account deleted.")
+                pause()
                 break
             print("Cancelled.")
+            pause()
         elif choice == "0":
             log_action(user, "Logged out", "")
             break
         else:
             print("Invalid choice.")
+            pause()
 
 
 def super_menu(user: Dict[str, str]) -> None:
     while True:
+        clear_screen()
         print("\nSuper Admin Menu")
         print("1. Add manager")
         print("2. Update manager")
@@ -496,6 +544,7 @@ def super_menu(user: Dict[str, str]) -> None:
         print("10. Manager functions")
         print("0. Logout")
         choice = prompt_text("Choose: ")
+        clear_screen()
 
         if choice == "1":
             if not ensure_permission(user, "user.add_manager"):
@@ -503,6 +552,7 @@ def super_menu(user: Dict[str, str]) -> None:
             username = prompt_until_valid("Username: ", validate_username)
             if user_service.username_exists(username):
                 print("Username already exists.")
+                pause()
                 continue
             password = prompt_password_until_valid("Password: ", validate_password)
             first_name = prompt_until_valid("First name: ", validate_name)
@@ -512,6 +562,7 @@ def super_menu(user: Dict[str, str]) -> None:
             employee_service.create_profile(user_id, first_name, last_name, registration_date)
             log_action(user, "Manager created", f"username: {username}")
             print("Manager created.")
+            pause()
         elif choice == "2":
             if not ensure_permission(user, "user.update_manager"):
                 continue
@@ -519,15 +570,18 @@ def super_menu(user: Dict[str, str]) -> None:
             target = user_service.get_user_by_username(username)
             if not target:
                 print("User not found.")
+                pause()
                 continue
             if target["role"] != ROLE_MANAGER:
                 print("User is not a manager.")
+                pause()
                 continue
             first_name = prompt_until_valid("First name: ", validate_name)
             last_name = prompt_until_valid("Last name: ", validate_name)
             employee_service.update_profile(target["id"], first_name, last_name)
             log_action(user, "Manager updated", f"username: {username}")
             print("Manager updated.")
+            pause()
         elif choice == "3":
             if not ensure_permission(user, "user.delete_manager"):
                 continue
@@ -535,13 +589,16 @@ def super_menu(user: Dict[str, str]) -> None:
             target = user_service.get_user_by_username(username)
             if not target:
                 print("User not found.")
+                pause()
                 continue
             if target["role"] != ROLE_MANAGER:
                 print("User is not a manager.")
+                pause()
                 continue
             user_service.delete_user(target["id"])
             log_action(user, "Manager deleted", f"username: {username}")
             print("Manager deleted.")
+            pause()
         elif choice == "4":
             if not ensure_permission(user, "user.reset_manager_pw"):
                 continue
@@ -549,14 +606,17 @@ def super_menu(user: Dict[str, str]) -> None:
             target = user_service.get_user_by_username(username)
             if not target:
                 print("User not found.")
+                pause()
                 continue
             if target["role"] != ROLE_MANAGER:
                 print("User is not a manager.")
+                pause()
                 continue
             temp_pw = "Temp_" + datetime.datetime.now().strftime("%H%M%S")
             user_service.update_password(target["id"], temp_pw)
             log_action(user, "Manager password reset", f"username: {username}")
             print(f"Temporary password: {temp_pw}")
+            pause()
         elif choice == "5":
             if not ensure_permission(user, "backup.generate_restore_code"):
                 continue
@@ -564,22 +624,27 @@ def super_menu(user: Dict[str, str]) -> None:
             target = user_service.get_user_by_username(username)
             if not target:
                 print("User not found.")
+                pause()
                 continue
             if target["role"] != ROLE_MANAGER:
                 print("User is not a manager.")
+                pause()
                 continue
             backups = backup.list_backups()
             if not backups:
                 print("No backups available.")
+                pause()
                 continue
             print("Backups: " + ", ".join(backups))
             backup_name = prompt_text("Backup name: ")
             if backup_name not in backups:
                 print("Backup not found.")
+                pause()
                 continue
             code = restore_code_service.generate_restore_code(target["id"], backup_name)
             log_action(user, "Restore code generated", f"manager: {username}, backup: {backup_name}")
             print(f"Restore code: {code}")
+            pause()
         elif choice == "6":
             if not ensure_permission(user, "backup.revoke_restore_code"):
                 continue
@@ -589,12 +654,14 @@ def super_menu(user: Dict[str, str]) -> None:
                 print("Code revoked.")
             else:
                 print("Code not found.")
+            pause()
         elif choice == "7":
             if not ensure_permission(user, "backup.restore_any"):
                 continue
             backups = backup.list_backups()
             if not backups:
                 print("No backups available.")
+                pause()
                 continue
             print("Backups: " + ", ".join(backups))
             name = prompt_text("Backup name: ")
@@ -603,16 +670,19 @@ def super_menu(user: Dict[str, str]) -> None:
                 print("Backup restored.")
             else:
                 print("Backup not found.")
+            pause()
         elif choice == "8":
             if not ensure_permission(user, "log.view"):
                 continue
             handle_view_logs(user)
+            pause()
         elif choice == "9":
             if not ensure_permission(user, "backup.create"):
                 continue
             name = backup.create_backup()
             log_action(user, "Backup created", f"backup: {name}")
             print(f"Backup created: {name}")
+            pause()
         elif choice == "10":
             manager_menu(user)
         elif choice == "0":
@@ -620,6 +690,7 @@ def super_menu(user: Dict[str, str]) -> None:
             break
         else:
             print("Invalid choice.")
+            pause()
 
 
 def run_app() -> None:
