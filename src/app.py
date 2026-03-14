@@ -48,6 +48,25 @@ from ui.prompts import (
 SUPER_USERNAME = "super_admin"
 SUPER_PASSWORD = "Admin_123?"
 
+USERNAME_HINT = "8-10 chars; starts with letter/_; letters, digits, _, ', ."
+PASSWORD_HINT = "12-50 chars; lower, upper, digit, special"
+NAME_HINT = "letters, spaces, hyphens, apostrophes; up to 50"
+DOC_TYPE_HINT = "Passport or ID-Card"
+DATE_HINT = "YYYY-MM-DD"
+CLAIM_DATE_HINT = "YYYY-MM-DD; past 2 months or next 14 days"
+GENDER_HINT = "male or female"
+STREET_HINT = "2-80 chars; letters, digits, spaces, hyphen, apostrophe"
+HOUSE_HINT = "1-6 digits"
+ZIP_HINT = "DDDDXX"
+EMAIL_HINT = "name@domain.tld"
+MOBILE_HINT = "8 digits"
+ID_DOC_HINT = "AA123456 or A1234567"
+BSN_HINT = "9 digits"
+PROJECT_HINT = "2-10 digits"
+CLAIM_TYPE_HINT = "Travel or Home Office"
+TRAVEL_HINT = "1-6 digits"
+SALARY_HINT = "YYYY-MM"
+
 FAILED_LOGIN_ATTEMPTS: Dict[str, List[datetime.datetime]] = {}
 LOCKED_UNTIL: Dict[str, datetime.datetime] = {}
 
@@ -165,37 +184,39 @@ def handle_view_logs(user: Dict[str, str]) -> None:
 
 
 def prompt_employee_data() -> Dict[str, str]:
-    doc_type = prompt_until_valid("Document Type (Passport/ID-Card): ", validate_identity_doc_type)
+    doc_type = prompt_until_valid(
+        "Document Type (Passport/ID-Card): ", validate_identity_doc_type, hint=DOC_TYPE_HINT
+    )
     if doc_type.strip().lower() == "passport":
         doc_type = "Passport"
     else:
         doc_type = "ID-Card"
     data = {
-        "birthday": prompt_until_valid("Birthday (YYYY-MM-DD): ", validate_date),
-        "gender": prompt_until_valid("Gender (male/female): ", validate_gender),
-        "street": prompt_until_valid("Street name: ", validate_street),
-        "house_number": prompt_until_valid("House number: ", validate_house_number),
-        "zip": prompt_until_valid("ZIP code (DDDDXX): ", validate_zip).upper(),
+        "birthday": prompt_until_valid("Birthday (YYYY-MM-DD): ", validate_date, hint=DATE_HINT),
+        "gender": prompt_until_valid("Gender (male/female): ", validate_gender, hint=GENDER_HINT),
+        "street": prompt_until_valid("Street name: ", validate_street, hint=STREET_HINT),
+        "house_number": prompt_until_valid("House number: ", validate_house_number, hint=HOUSE_HINT),
+        "zip": prompt_until_valid("ZIP code (DDDDXX): ", validate_zip, hint=ZIP_HINT).upper(),
         "city": prompt_choice(
             "City (choose number): "
             + " ".join([f"{idx + 1}:{name}" for idx, name in enumerate(CITY_OPTIONS)])
             + "\n",
             {str(idx + 1): name for idx, name in enumerate(CITY_OPTIONS)},
         ),
-        "email": prompt_until_valid("Email: ", validate_email),
-        "mobile": format_mobile(prompt_until_valid("Mobile (8 digits): ", validate_mobile)),
+        "email": prompt_until_valid("Email: ", validate_email, hint=EMAIL_HINT),
+        "mobile": format_mobile(prompt_until_valid("Mobile (8 digits): ", validate_mobile, hint=MOBILE_HINT)),
         "id_doc_type": doc_type,
-        "id_doc_number": prompt_until_valid("Document Number: ", validate_id_doc_number).upper(),
-        "bsn": prompt_until_valid("BSN (9 digits): ", validate_bsn),
+        "id_doc_number": prompt_until_valid("Document Number: ", validate_id_doc_number, hint=ID_DOC_HINT).upper(),
+        "bsn": prompt_until_valid("BSN (9 digits): ", validate_bsn, hint=BSN_HINT),
     }
     return data
 
 
 def prompt_claim_data() -> Dict[str, str]:
     data = {
-        "claim_date": prompt_until_valid("Claim date (YYYY-MM-DD): ", validate_claim_date),
-        "project_number": prompt_until_valid("Project number (2-10 digits): ", validate_project_number),
-        "claim_type": prompt_until_valid("Claim type (Travel/Home Office): ", validate_claim_type),
+        "claim_date": prompt_until_valid("Claim date (YYYY-MM-DD): ", validate_claim_date, hint=CLAIM_DATE_HINT),
+        "project_number": prompt_until_valid("Project number (2-10 digits): ", validate_project_number, hint=PROJECT_HINT),
+        "claim_type": prompt_until_valid("Claim type (Travel/Home Office): ", validate_claim_type, hint=CLAIM_TYPE_HINT),
     }
     if data["claim_type"].strip().lower() == "travel":
         data["claim_type"] = "Travel"
@@ -204,11 +225,13 @@ def prompt_claim_data() -> Dict[str, str]:
     if data["claim_type"] == "Travel":
         data.update(
             {
-                "travel_distance": prompt_until_valid("Travel distance (km): ", validate_travel_distance),
-                "from_zip": prompt_until_valid("From ZIP (DDDDXX): ", validate_zip).upper(),
-                "from_house": prompt_until_valid("From house number: ", validate_house_number),
-                "to_zip": prompt_until_valid("To ZIP (DDDDXX): ", validate_zip).upper(),
-                "to_house": prompt_until_valid("To house number: ", validate_house_number),
+                "travel_distance": prompt_until_valid(
+                    "Travel distance (km): ", validate_travel_distance, hint=TRAVEL_HINT
+                ),
+                "from_zip": prompt_until_valid("From ZIP (DDDDXX): ", validate_zip, hint=ZIP_HINT).upper(),
+                "from_house": prompt_until_valid("From house number: ", validate_house_number, hint=HOUSE_HINT),
+                "to_zip": prompt_until_valid("To ZIP (DDDDXX): ", validate_zip, hint=ZIP_HINT).upper(),
+                "to_house": prompt_until_valid("To house number: ", validate_house_number, hint=HOUSE_HINT),
             }
         )
     return data
@@ -304,7 +327,7 @@ def employee_menu(user: Dict[str, str]) -> None:
         elif choice == "5":
             if not ensure_permission(user, "self.update_password"):
                 continue
-            password = prompt_password_until_valid("New password: ", validate_password)
+            password = prompt_password_until_valid("New password: ", validate_password, hint=PASSWORD_HINT)
             user_service.update_password(user["id"], password)
             log_action(user, "Password updated", "")
             print("Password updated.")
@@ -341,14 +364,14 @@ def manager_menu(user: Dict[str, str]) -> None:
         if choice == "1":
             if not ensure_permission(user, "user.add_employee"):
                 continue
-            username = prompt_until_valid("Username: ", validate_username)
+            username = prompt_until_valid("Username: ", validate_username, hint=USERNAME_HINT)
             if user_service.username_exists(username):
                 print("Username already exists.")
                 pause()
                 continue
-            password = prompt_password_until_valid("Password: ", validate_password)
-            first_name = prompt_until_valid("First name: ", validate_name)
-            last_name = prompt_until_valid("Last name: ", validate_name)
+            password = prompt_password_until_valid("Password: ", validate_password, hint=PASSWORD_HINT)
+            first_name = prompt_until_valid("First name: ", validate_name, hint=NAME_HINT)
+            last_name = prompt_until_valid("Last name: ", validate_name, hint=NAME_HINT)
             user_id = user_service.create_user(username, password, ROLE_EMPLOYEE)
             registration_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             employee_service.create_profile(user_id, first_name, last_name, registration_date)
@@ -425,8 +448,8 @@ def manager_menu(user: Dict[str, str]) -> None:
                 print("Invalid claim ID.")
                 pause()
                 continue
-            project = prompt_until_valid("New project number: ", validate_project_number)
-            distance = prompt_until_valid("New travel distance: ", validate_travel_distance)
+            project = prompt_until_valid("New project number: ", validate_project_number, hint=PROJECT_HINT)
+            distance = prompt_until_valid("New travel distance: ", validate_travel_distance, hint=TRAVEL_HINT)
             if claim_service.manager_modify_claim(claim_id, {"project_number": project, "travel_distance": distance}):
                 log_action(user, "Claim modified", f"claim_id: {claim_id}")
                 print("Claim modified.")
@@ -445,7 +468,7 @@ def manager_menu(user: Dict[str, str]) -> None:
             status = prompt_choice("Approve (A) or Reject (R): ", {"A": "Approved", "R": "Rejected"})
             salary_batch = ""
             if status == "Approved":
-                salary_batch = prompt_until_valid("Salary batch (YYYY-MM): ", validate_salary_batch)
+                salary_batch = prompt_until_valid("Salary batch (YYYY-MM): ", validate_salary_batch, hint=SALARY_HINT)
             if claim_service.set_approval(claim_id, status, user["username"], salary_batch):
                 log_action(user, f"Claim {status}", f"claim_id: {claim_id}")
                 print("Claim status updated.")
@@ -497,13 +520,13 @@ def manager_menu(user: Dict[str, str]) -> None:
                 continue
             sub = prompt_choice("Update (P)assword or (N)ame: ", {"P": "password", "N": "name"})
             if sub == "password":
-                password = prompt_password_until_valid("New password: ", validate_password)
+                password = prompt_password_until_valid("New password: ", validate_password, hint=PASSWORD_HINT)
                 user_service.update_password(user["id"], password)
                 log_action(user, "Password updated", "")
                 print("Password updated.")
             else:
-                first_name = prompt_until_valid("First name: ", validate_name)
-                last_name = prompt_until_valid("Last name: ", validate_name)
+                first_name = prompt_until_valid("First name: ", validate_name, hint=NAME_HINT)
+                last_name = prompt_until_valid("Last name: ", validate_name, hint=NAME_HINT)
                 employee_service.update_profile(user["id"], first_name, last_name)
                 log_action(user, "Profile updated", "")
                 print("Profile updated.")
@@ -549,14 +572,14 @@ def super_menu(user: Dict[str, str]) -> None:
         if choice == "1":
             if not ensure_permission(user, "user.add_manager"):
                 continue
-            username = prompt_until_valid("Username: ", validate_username)
+            username = prompt_until_valid("Username: ", validate_username, hint=USERNAME_HINT)
             if user_service.username_exists(username):
                 print("Username already exists.")
                 pause()
                 continue
-            password = prompt_password_until_valid("Password: ", validate_password)
-            first_name = prompt_until_valid("First name: ", validate_name)
-            last_name = prompt_until_valid("Last name: ", validate_name)
+            password = prompt_password_until_valid("Password: ", validate_password, hint=PASSWORD_HINT)
+            first_name = prompt_until_valid("First name: ", validate_name, hint=NAME_HINT)
+            last_name = prompt_until_valid("Last name: ", validate_name, hint=NAME_HINT)
             user_id = user_service.create_user(username, password, ROLE_MANAGER)
             registration_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             employee_service.create_profile(user_id, first_name, last_name, registration_date)
@@ -576,8 +599,8 @@ def super_menu(user: Dict[str, str]) -> None:
                 print("User is not a manager.")
                 pause()
                 continue
-            first_name = prompt_until_valid("First name: ", validate_name)
-            last_name = prompt_until_valid("Last name: ", validate_name)
+            first_name = prompt_until_valid("First name: ", validate_name, hint=NAME_HINT)
+            last_name = prompt_until_valid("Last name: ", validate_name, hint=NAME_HINT)
             employee_service.update_profile(target["id"], first_name, last_name)
             log_action(user, "Manager updated", f"username: {username}")
             print("Manager updated.")
