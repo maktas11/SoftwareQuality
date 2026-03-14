@@ -1,6 +1,6 @@
 import datetime
 import re
-from typing import Iterable, List, Tuple
+from typing import Tuple
 
 
 CITY_OPTIONS = [
@@ -18,7 +18,7 @@ CITY_OPTIONS = [
 
 
 def normalize_username(username: str) -> str:
-    return username.strip().lower()
+    return username.lower()
 
 
 def validate_username(username: str) -> Tuple[bool, str]:
@@ -47,7 +47,7 @@ def validate_password(password: str) -> Tuple[bool, str]:
 
 
 def validate_name(value: str) -> Tuple[bool, str]:
-    if not value or len(value.strip()) < 1:
+    if not value or len(value) < 1:
         return False, "Value is required."
     if re.match(r"^[A-Za-z\-\s']{1,50}$", value):
         return True, ""
@@ -55,7 +55,7 @@ def validate_name(value: str) -> Tuple[bool, str]:
 
 
 def validate_street(value: str) -> Tuple[bool, str]:
-    if not value or len(value.strip()) < 2:
+    if not value or len(value) < 2:
         return False, "Street is required."
     if re.match(r"^[A-Za-z0-9\-\s']{2,80}$", value):
         return True, ""
@@ -84,7 +84,7 @@ def validate_claim_date(value: str) -> Tuple[bool, str]:
 
 
 def validate_gender(value: str) -> Tuple[bool, str]:
-    if value.lower() in {"male", "female"}:
+    if re.fullmatch(r"male|female", value, flags=re.IGNORECASE):
         return True, ""
     return False, "Gender must be male or female."
 
@@ -96,7 +96,7 @@ def validate_house_number(value: str) -> Tuple[bool, str]:
 
 
 def validate_zip(value: str) -> Tuple[bool, str]:
-    if re.match(r"^\d{4}[A-Z]{2}$", value.upper()):
+    if re.match(r"^\d{4}[A-Z]{2}$", value, flags=re.IGNORECASE):
         return True, ""
     return False, "ZIP code must be DDDDXX."
 
@@ -124,7 +124,7 @@ def format_mobile(value: str) -> str:
 
 
 def validate_id_doc_number(value: str) -> Tuple[bool, str]:
-    if re.match(r"^(?:[A-Z]{2}\d{6}|[A-Z]{1}\d{7})$", value.upper()):
+    if re.match(r"^(?:[A-Z]{2}\d{6}|[A-Z]{1}\d{7})$", value, flags=re.IGNORECASE):
         return True, ""
     return False, "Identity number format invalid."
 
@@ -148,7 +148,7 @@ def validate_travel_distance(value: str) -> Tuple[bool, str]:
 
 
 def validate_claim_type(value: str) -> Tuple[bool, str]:
-    if value.strip().lower() in {"travel", "home office"}:
+    if re.fullmatch(r"travel|home office", value, flags=re.IGNORECASE):
         return True, ""
     return False, "Claim type must be Travel or Home Office."
 
@@ -160,6 +160,6 @@ def validate_salary_batch(value: str) -> Tuple[bool, str]:
 
 
 def validate_identity_doc_type(value: str) -> Tuple[bool, str]:
-    if value.strip().lower() in {"passport", "id-card"}:
+    if re.fullmatch(r"passport|id-card", value, flags=re.IGNORECASE):
         return True, ""
     return False, "Document type must be Passport or ID-Card."

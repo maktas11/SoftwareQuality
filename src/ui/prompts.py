@@ -13,7 +13,7 @@ def prompt_password(label: str) -> str:
 
 def prompt_until_valid(label: str, validator: Callable[[str], Tuple[bool, str]], allow_empty: bool = False) -> str:
     while True:
-        value = input(label).strip()
+        value = input(label)
         if allow_empty and value == "":
             return value
         ok, msg = validator(value)
@@ -24,7 +24,7 @@ def prompt_until_valid(label: str, validator: Callable[[str], Tuple[bool, str]],
 
 def prompt_password_until_valid(label: str, validator: Callable[[str], Tuple[bool, str]]) -> str:
     while True:
-        value = getpass.getpass(label).strip()
+        value = getpass.getpass(label)
         ok, msg = validator(value)
         if ok:
             return value
