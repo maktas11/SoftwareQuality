@@ -1,0 +1,645 @@
+import datetime
+from typing import Dict, List, Optional
+
+from core import backup
+from core.auth import ROLE_EMPLOYEE, ROLE_MANAGER, ROLE_SUPER, has_permission
+from core.config import ensure_data_dirs
+from core.db import init_db
+from core.logging_utils import (
+    append_log,
+    count_unread_suspicious,
+    get_super_last_read,
+    read_logs,
+    set_super_last_read,
+)
+from core.validation import (
+    CITY_OPTIONS,
+    format_mobile,
+    normalize_username,
+    validate_bsn,
+    validate_claim_date,
+    validate_claim_type,
+    validate_date,
+    validate_email,
+    validate_gender,
+    validate_house_number,
+    validate_id_doc_number,
+    validate_identity_doc_type,
+    validate_mobile,
+    validate_name,
+    validate_password,
+    validate_project_number,
+    validate_salary_batch,
+    validate_travel_distance,
+    validate_username,
+    validate_zip,
+    validate_street,
+)
+from services import claim_service, employee_service, restore_code_service, user_service
+from ui.prompts import (
+    prompt_choice,
+    prompt_password,
+    prompt_password_until_valid,
+    prompt_text,
+    prompt_until_valid,
+)
+
+SUPER_USERNAME = "super_admin"
+SUPER_PASSWORD = "Admin_123?"
+
+FAILED_LOGIN_ATTEMPTS: Dict[str, List[datetime.datetime]] = {}
+LOCKED_UNTIL: Dict[str, datetime.datetime] = {}
+
+
+def log_action(user: Dict[str, str], description: str, info: str = "", suspicious: bool = False) -> None:
+    append_log(user.get("username", ""), description, info, suspicious)
+
+
+def ensure_permission(user: Dict[str, str], permission: str) -> bool:
+    if has_permission(user["role"], permission):
+        return True
+    log_action(user, "Unauthorized access", f"permission: {permission}", True)
+    print("Unauthorized action.")
+    return False
+
+
+def track_failed_login(username: str) -> bool:
+    now = datetime.datetime.now()
+    key = normalize_username(username)
+    FAILED_LOGIN_ATTEMPTS.setdefault(key, [])
+    FAILED_LOGIN_ATTEMPTS[key] = [t for t in FAILED_LOGIN_ATTEMPTS[key] if (now - t).seconds < 300]
+    FAILED_LOGIN_ATTEMPTS[key].append(now)
+    if len(FAILED_LOGIN_ATTEMPTS[key]) >= 5:
+        LOCKED_UNTIL[key] = now + datetime.timedelta(minutes=5)
+    return len(FAILED_LOGIN_ATTEMPTS[key]) >= 3
+
+
+def clear_failed_login(username: str) -> None:
+    key = normalize_username(username)
+    FAILED_LOGIN_ATTEMPTS.pop(key, None)
+    LOCKED_UNTIL.pop(key, None)
+
+
+def is_locked_out(username: str) -> bool:
+    key = normalize_username(username)
+    until = LOCKED_UNTIL.get(key)
+    if not until:
+        return False
+    if datetime.datetime.now() >= until:
+        LOCKED_UNTIL.pop(key, None)
+        return False
+    return True
+
+
+def login() -> Optional[Dict[str, str]]:
+    print("=== Login ===")
+    username = prompt_text("Username: ")
+    password = prompt_password("Password: ")
+
+    if is_locked_out(username):
+        log_action({"username": username}, "Login locked", "Too many attempts", True)
+        print("Account temporarily locked. Try again later.")
+        return None
+
+    if normalize_username(username) == SUPER_USERNAME:
+        if password == SUPER_PASSWORD:
+            clear_failed_login(username)
+            user = {"id": None, "username": SUPER_USERNAME, "role": ROLE_SUPER}
+            log_action(user, "Logged in", "")
+            return user
+        suspicious = track_failed_login(username)
+        log_action({"username": username}, "Unsuccessful login", f"username: {username}", suspicious)
+        print("Invalid credentials.")
+        return None
+
+    user = user_service.verify_user_password(username, password)
+    if user:
+        clear_failed_login(username)
+        log_action(user, "Logged in", "")
+        return user
+
+    suspicious = track_failed_login(username)
+    log_action({"username": username}, "Unsuccessful login", f"username: {username}", suspicious)
+    print("Invalid credentials.")
+    return None
+
+
+def notify_unread_suspicious(user: Dict[str, str]) -> None:
+    if user["role"] == ROLE_SUPER:
+        last_read = get_super_last_read()
+    else:
+        last_read = user.get("last_log_read_at", "")
+    count = count_unread_suspicious(last_read)
+    if count > 0:
+        print(f"WARNING: {count} unread suspicious log entries.")
+
+
+def handle_view_logs(user: Dict[str, str]) -> None:
+    log_action(user, "View logs", "")
+    logs = read_logs()
+    if not logs:
+        print("No logs available.")
+    else:
+        print("No | Date | Time | Username | Description | Info | Suspicious")
+        for entry in logs:
+            print(
+                f"{entry.get('id')} | {entry.get('date')} | {entry.get('time')} | "
+                f"{entry.get('username')} | {entry.get('description')} | {entry.get('info')} | {entry.get('suspicious')}"
+            )
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if user["role"] == ROLE_SUPER:
+        set_super_last_read(timestamp)
+    else:
+        user_service.update_last_log_read(user["id"], timestamp)
+
+
+def prompt_employee_data() -> Dict[str, str]:
+    doc_type = prompt_until_valid("Document Type (Passport/ID-Card): ", validate_identity_doc_type)
+    if doc_type.strip().lower() == "passport":
+        doc_type = "Passport"
+    else:
+        doc_type = "ID-Card"
+    data = {
+        "birthday": prompt_until_valid("Birthday (YYYY-MM-DD): ", validate_date),
+        "gender": prompt_until_valid("Gender (male/female): ", validate_gender),
+        "street": prompt_until_valid("Street name: ", validate_street),
+        "house_number": prompt_until_valid("House number: ", validate_house_number),
+        "zip": prompt_until_valid("ZIP code (DDDDXX): ", validate_zip).upper(),
+        "city": prompt_choice(
+            "City (choose number): "
+            + " ".join([f"{idx + 1}:{name}" for idx, name in enumerate(CITY_OPTIONS)])
+            + "\n",
+            {str(idx + 1): name for idx, name in enumerate(CITY_OPTIONS)},
+        ),
+        "email": prompt_until_valid("Email: ", validate_email),
+        "mobile": format_mobile(prompt_until_valid("Mobile (8 digits): ", validate_mobile)),
+        "id_doc_type": doc_type,
+        "id_doc_number": prompt_until_valid("Document Number: ", validate_id_doc_number).upper(),
+        "bsn": prompt_until_valid("BSN (9 digits): ", validate_bsn),
+    }
+    return data
+
+
+def prompt_claim_data() -> Dict[str, str]:
+    data = {
+        "claim_date": prompt_until_valid("Claim date (YYYY-MM-DD): ", validate_claim_date),
+        "project_number": prompt_until_valid("Project number (2-10 digits): ", validate_project_number),
+        "claim_type": prompt_until_valid("Claim type (Travel/Home Office): ", validate_claim_type),
+    }
+    if data["claim_type"].strip().lower() == "travel":
+        data["claim_type"] = "Travel"
+    else:
+        data["claim_type"] = "Home Office"
+    if data["claim_type"] == "Travel":
+        data.update(
+            {
+                "travel_distance": prompt_until_valid("Travel distance (km): ", validate_travel_distance),
+                "from_zip": prompt_until_valid("From ZIP (DDDDXX): ", validate_zip).upper(),
+                "from_house": prompt_until_valid("From house number: ", validate_house_number),
+                "to_zip": prompt_until_valid("To ZIP (DDDDXX): ", validate_zip).upper(),
+                "to_house": prompt_until_valid("To house number: ", validate_house_number),
+            }
+        )
+    return data
+
+
+def display_claims(claims: List[Dict[str, str]]) -> None:
+    if not claims:
+        print("No claims found.")
+        return
+    for claim in claims:
+        print(
+            f"ID {claim['id']} | Date {claim['claim_date']} | Project {claim['project_number']} | "
+            f"Type {claim['claim_type']} | Status {claim['approval_status']} | Salary {claim['salary_batch']}"
+        )
+
+
+def display_employees(records: List[Dict[str, str]]) -> None:
+    if not records:
+        print("No employees found.")
+        return
+    for rec in records:
+        print(
+            f"User {rec['username']} | Name {rec['first_name']} {rec['last_name']} | "
+            f"Employee ID {rec['employee_id']} | City {rec['city']}"
+        )
+
+
+def prompt_int(label: str) -> Optional[int]:
+    raw = prompt_text(label)
+    if not raw.isdigit():
+        return None
+    return int(raw)
+
+
+def employee_menu(user: Dict[str, str]) -> None:
+    while True:
+        print("\nEmployee Menu")
+        print("1. Add claim")
+        print("2. Update claim")
+        print("3. Delete claim")
+        print("4. Search my claims")
+        print("5. Update my password")
+        print("0. Logout")
+        choice = prompt_text("Choose: ")
+        if choice == "1":
+            if not ensure_permission(user, "claim.add"):
+                continue
+            data = prompt_claim_data()
+            claim_id = claim_service.create_claim(user["id"], data)
+            log_action(user, "New claim", f"claim_id: {claim_id}")
+            print("Claim created.")
+        elif choice == "2":
+            if not ensure_permission(user, "claim.update_own"):
+                continue
+            claim_id = prompt_int("Claim ID: ")
+            if claim_id is None:
+                print("Invalid claim ID.")
+                continue
+            data = prompt_claim_data()
+            if claim_service.update_claim_employee(claim_id, user["id"], data):
+                log_action(user, "Claim updated", f"claim_id: {claim_id}")
+                print("Claim updated.")
+            else:
+                log_action(user, "Unauthorized claim update", f"claim_id: {claim_id}", True)
+                print("Cannot update claim.")
+        elif choice == "3":
+            if not ensure_permission(user, "claim.delete_own"):
+                continue
+            claim_id = prompt_int("Claim ID: ")
+            if claim_id is None:
+                print("Invalid claim ID.")
+                continue
+            if claim_service.delete_claim_employee(claim_id, user["id"]):
+                log_action(user, "Claim deleted", f"claim_id: {claim_id}")
+                print("Claim deleted.")
+            else:
+                log_action(user, "Unauthorized claim delete", f"claim_id: {claim_id}", True)
+                print("Cannot delete claim.")
+        elif choice == "4":
+            if not ensure_permission(user, "claim.search_own"):
+                continue
+            claims = claim_service.list_claims_by_employee(user["id"])
+            log_action(user, "Search claims", "scope: own")
+            display_claims(claims)
+        elif choice == "5":
+            if not ensure_permission(user, "self.update_password"):
+                continue
+            password = prompt_password_until_valid("New password: ", validate_password)
+            user_service.update_password(user["id"], password)
+            log_action(user, "Password updated", "")
+            print("Password updated.")
+        elif choice == "0":
+            log_action(user, "Logged out", "")
+            break
+        else:
+            print("Invalid choice.")
+
+
+def manager_menu(user: Dict[str, str]) -> None:
+    while True:
+        print("\nManager Menu")
+        print("1. Add employee")
+        print("2. Update employee")
+        print("3. Delete employee")
+        print("4. Reset employee password")
+        print("5. Search employees")
+        print("6. Modify claim")
+        print("7. Approve or reject claim")
+        print("8. Search claims")
+        print("9. Backup system")
+        print("10. Restore backup (with code)")
+        print("11. View logs")
+        print("12. Update my account")
+        print("13. Delete my account")
+        print("0. Logout")
+        choice = prompt_text("Choose: ")
+
+        if choice == "1":
+            if not ensure_permission(user, "user.add_employee"):
+                continue
+            username = prompt_until_valid("Username: ", validate_username)
+            if user_service.username_exists(username):
+                print("Username already exists.")
+                continue
+            password = prompt_password_until_valid("Password: ", validate_password)
+            first_name = prompt_until_valid("First name: ", validate_name)
+            last_name = prompt_until_valid("Last name: ", validate_name)
+            user_id = user_service.create_user(username, password, ROLE_EMPLOYEE)
+            registration_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            employee_service.create_profile(user_id, first_name, last_name, registration_date)
+            employee_id = employee_service.create_employee(user_id, prompt_employee_data())
+            log_action(user, "New employee created", f"username: {username}, employee_id: {employee_id}")
+            print("Employee created.")
+        elif choice == "2":
+            if not ensure_permission(user, "user.update_employee"):
+                continue
+            username = prompt_text("Employee username: ")
+            target = user_service.get_user_by_username(username)
+            if not target:
+                print("User not found.")
+                continue
+            if target["role"] != ROLE_EMPLOYEE:
+                print("User is not an employee.")
+                continue
+            data = prompt_employee_data()
+            employee_service.update_employee(target["id"], data)
+            log_action(user, "Employee updated", f"username: {username}")
+            print("Employee updated.")
+        elif choice == "3":
+            if not ensure_permission(user, "user.delete_employee"):
+                continue
+            username = prompt_text("Employee username: ")
+            target = user_service.get_user_by_username(username)
+            if not target:
+                print("User not found.")
+                continue
+            if target["role"] != ROLE_EMPLOYEE:
+                print("User is not an employee.")
+                continue
+            user_service.delete_user(target["id"])
+            log_action(user, "Employee deleted", f"username: {username}")
+            print("Employee deleted.")
+        elif choice == "4":
+            if not ensure_permission(user, "user.reset_employee_pw"):
+                continue
+            username = prompt_text("Employee username: ")
+            target = user_service.get_user_by_username(username)
+            if not target:
+                print("User not found.")
+                continue
+            if target["role"] != ROLE_EMPLOYEE:
+                print("User is not an employee.")
+                continue
+            temp_pw = "Temp_" + datetime.datetime.now().strftime("%H%M%S")
+            user_service.update_password(target["id"], temp_pw)
+            log_action(user, "Employee password reset", f"username: {username}")
+            print(f"Temporary password: {temp_pw}")
+        elif choice == "5":
+            if not ensure_permission(user, "employee.search"):
+                continue
+            term = prompt_text("Search term: ")
+            results = employee_service.search_employees(term)
+            log_action(user, "Search employees", f"term: {term}")
+            display_employees(results)
+        elif choice == "6":
+            if not ensure_permission(user, "claim.modify"):
+                continue
+            claim_id = prompt_int("Claim ID: ")
+            if claim_id is None:
+                print("Invalid claim ID.")
+                continue
+            project = prompt_until_valid("New project number: ", validate_project_number)
+            distance = prompt_until_valid("New travel distance: ", validate_travel_distance)
+            if claim_service.manager_modify_claim(claim_id, {"project_number": project, "travel_distance": distance}):
+                log_action(user, "Claim modified", f"claim_id: {claim_id}")
+                print("Claim modified.")
+            else:
+                log_action(user, "Claim modify failed", f"claim_id: {claim_id}", True)
+                print("Claim not found.")
+        elif choice == "7":
+            if not ensure_permission(user, "claim.approve"):
+                continue
+            claim_id = prompt_int("Claim ID: ")
+            if claim_id is None:
+                print("Invalid claim ID.")
+                continue
+            status = prompt_choice("Approve (A) or Reject (R): ", {"A": "Approved", "R": "Rejected"})
+            salary_batch = ""
+            if status == "Approved":
+                salary_batch = prompt_until_valid("Salary batch (YYYY-MM): ", validate_salary_batch)
+            if claim_service.set_approval(claim_id, status, user["username"], salary_batch):
+                log_action(user, f"Claim {status}", f"claim_id: {claim_id}")
+                print("Claim status updated.")
+            else:
+                log_action(user, "Claim approval failed", f"claim_id: {claim_id}", True)
+                print("Claim not found.")
+        elif choice == "8":
+            if not ensure_permission(user, "claim.search_all"):
+                continue
+            term = prompt_text("Search term: ")
+            claims = [
+                c
+                for c in claim_service.list_all_claims()
+                if term.lower() in " ".join(str(v) for v in c.values()).lower()
+            ]
+            log_action(user, "Search claims", f"term: {term}")
+            display_claims(claims)
+        elif choice == "9":
+            if not ensure_permission(user, "backup.create"):
+                continue
+            name = backup.create_backup()
+            log_action(user, "Backup created", f"backup: {name}")
+            print(f"Backup created: {name}")
+        elif choice == "10":
+            if not ensure_permission(user, "backup.restore_with_code"):
+                continue
+            code = prompt_text("Restore code: ")
+            backup_name = restore_code_service.verify_and_use_code(user["id"], code)
+            if not backup_name:
+                log_action(user, "Restore denied", "invalid code", True)
+                print("Invalid or used code.")
+            else:
+                if backup.restore_backup(backup_name):
+                    log_action(user, "Backup restored", f"backup: {backup_name}")
+                    print("Backup restored.")
+                else:
+                    print("Backup not found.")
+        elif choice == "11":
+            if not ensure_permission(user, "log.view"):
+                continue
+            handle_view_logs(user)
+        elif choice == "12":
+            if not ensure_permission(user, "self.update"):
+                continue
+            sub = prompt_choice("Update (P)assword or (N)ame: ", {"P": "password", "N": "name"})
+            if sub == "password":
+                password = prompt_password_until_valid("New password: ", validate_password)
+                user_service.update_password(user["id"], password)
+                log_action(user, "Password updated", "")
+                print("Password updated.")
+            else:
+                first_name = prompt_until_valid("First name: ", validate_name)
+                last_name = prompt_until_valid("Last name: ", validate_name)
+                employee_service.update_profile(user["id"], first_name, last_name)
+                log_action(user, "Profile updated", "")
+                print("Profile updated.")
+        elif choice == "13":
+            if not ensure_permission(user, "self.delete"):
+                continue
+            confirm = prompt_text("Type DELETE to confirm: ")
+            if confirm == "DELETE":
+                user_service.delete_user(user["id"])
+                log_action(user, "Account deleted", "")
+                print("Account deleted.")
+                break
+            print("Cancelled.")
+        elif choice == "0":
+            log_action(user, "Logged out", "")
+            break
+        else:
+            print("Invalid choice.")
+
+
+def super_menu(user: Dict[str, str]) -> None:
+    while True:
+        print("\nSuper Admin Menu")
+        print("1. Add manager")
+        print("2. Update manager")
+        print("3. Delete manager")
+        print("4. Reset manager password")
+        print("5. Generate restore code")
+        print("6. Revoke restore code")
+        print("7. Restore backup")
+        print("8. View logs")
+        print("9. Backup system")
+        print("10. Manager functions")
+        print("0. Logout")
+        choice = prompt_text("Choose: ")
+
+        if choice == "1":
+            if not ensure_permission(user, "user.add_manager"):
+                continue
+            username = prompt_until_valid("Username: ", validate_username)
+            if user_service.username_exists(username):
+                print("Username already exists.")
+                continue
+            password = prompt_password_until_valid("Password: ", validate_password)
+            first_name = prompt_until_valid("First name: ", validate_name)
+            last_name = prompt_until_valid("Last name: ", validate_name)
+            user_id = user_service.create_user(username, password, ROLE_MANAGER)
+            registration_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            employee_service.create_profile(user_id, first_name, last_name, registration_date)
+            log_action(user, "Manager created", f"username: {username}")
+            print("Manager created.")
+        elif choice == "2":
+            if not ensure_permission(user, "user.update_manager"):
+                continue
+            username = prompt_text("Manager username: ")
+            target = user_service.get_user_by_username(username)
+            if not target:
+                print("User not found.")
+                continue
+            if target["role"] != ROLE_MANAGER:
+                print("User is not a manager.")
+                continue
+            first_name = prompt_until_valid("First name: ", validate_name)
+            last_name = prompt_until_valid("Last name: ", validate_name)
+            employee_service.update_profile(target["id"], first_name, last_name)
+            log_action(user, "Manager updated", f"username: {username}")
+            print("Manager updated.")
+        elif choice == "3":
+            if not ensure_permission(user, "user.delete_manager"):
+                continue
+            username = prompt_text("Manager username: ")
+            target = user_service.get_user_by_username(username)
+            if not target:
+                print("User not found.")
+                continue
+            if target["role"] != ROLE_MANAGER:
+                print("User is not a manager.")
+                continue
+            user_service.delete_user(target["id"])
+            log_action(user, "Manager deleted", f"username: {username}")
+            print("Manager deleted.")
+        elif choice == "4":
+            if not ensure_permission(user, "user.reset_manager_pw"):
+                continue
+            username = prompt_text("Manager username: ")
+            target = user_service.get_user_by_username(username)
+            if not target:
+                print("User not found.")
+                continue
+            if target["role"] != ROLE_MANAGER:
+                print("User is not a manager.")
+                continue
+            temp_pw = "Temp_" + datetime.datetime.now().strftime("%H%M%S")
+            user_service.update_password(target["id"], temp_pw)
+            log_action(user, "Manager password reset", f"username: {username}")
+            print(f"Temporary password: {temp_pw}")
+        elif choice == "5":
+            if not ensure_permission(user, "backup.generate_restore_code"):
+                continue
+            username = prompt_text("Manager username: ")
+            target = user_service.get_user_by_username(username)
+            if not target:
+                print("User not found.")
+                continue
+            if target["role"] != ROLE_MANAGER:
+                print("User is not a manager.")
+                continue
+            backups = backup.list_backups()
+            if not backups:
+                print("No backups available.")
+                continue
+            print("Backups: " + ", ".join(backups))
+            backup_name = prompt_text("Backup name: ")
+            if backup_name not in backups:
+                print("Backup not found.")
+                continue
+            code = restore_code_service.generate_restore_code(target["id"], backup_name)
+            log_action(user, "Restore code generated", f"manager: {username}, backup: {backup_name}")
+            print(f"Restore code: {code}")
+        elif choice == "6":
+            if not ensure_permission(user, "backup.revoke_restore_code"):
+                continue
+            code = prompt_text("Restore code to revoke: ")
+            if restore_code_service.revoke_code(code):
+                log_action(user, "Restore code revoked", "")
+                print("Code revoked.")
+            else:
+                print("Code not found.")
+        elif choice == "7":
+            if not ensure_permission(user, "backup.restore_any"):
+                continue
+            backups = backup.list_backups()
+            if not backups:
+                print("No backups available.")
+                continue
+            print("Backups: " + ", ".join(backups))
+            name = prompt_text("Backup name: ")
+            if backup.restore_backup(name):
+                log_action(user, "Backup restored", f"backup: {name}")
+                print("Backup restored.")
+            else:
+                print("Backup not found.")
+        elif choice == "8":
+            if not ensure_permission(user, "log.view"):
+                continue
+            handle_view_logs(user)
+        elif choice == "9":
+            if not ensure_permission(user, "backup.create"):
+                continue
+            name = backup.create_backup()
+            log_action(user, "Backup created", f"backup: {name}")
+            print(f"Backup created: {name}")
+        elif choice == "10":
+            manager_menu(user)
+        elif choice == "0":
+            log_action(user, "Logged out", "")
+            break
+        else:
+            print("Invalid choice.")
+
+
+def run_app() -> None:
+    ensure_data_dirs()
+    init_db()
+    while True:
+        user = login()
+        if not user:
+            continue
+        notify_unread_suspicious(user)
+        if user["role"] == ROLE_EMPLOYEE:
+            employee_menu(user)
+        elif user["role"] == ROLE_MANAGER:
+            manager_menu(user)
+        elif user["role"] == ROLE_SUPER:
+            super_menu(user)
+        else:
+            print("Unknown role.")
+            break
+
+
+if __name__ == "__main__":
+    run_app()
