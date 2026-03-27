@@ -82,7 +82,7 @@ def validate_gender(value: str) -> Tuple[bool, str]:
 
 
 def validate_house_number(value: str) -> Tuple[bool, str]:
-    if re.match(r"^\d{1,6}$", value):
+    if re.match(r"^(?:0|[1-9]\d{0,5})$", value):
         return True, ""
     return False, "House number must be digits only."
 
@@ -134,7 +134,7 @@ def validate_project_number(value: str) -> Tuple[bool, str]:
 
 
 def validate_travel_distance(value: str) -> Tuple[bool, str]:
-    if re.match(r"^\d{1,6}$", value):
+    if re.match(r"^(?:0|[1-9]\d{0,5})$", value):
         return True, ""
     return False, "Travel distance must be digits only."
 

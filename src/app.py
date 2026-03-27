@@ -112,12 +112,10 @@ def clear_failed_login(username: str) -> None:
 def is_locked_out(username: str) -> bool:
     key = normalize_username(username)
     until = LOCKED_UNTIL.get(key)
-    if not until:
-        return False
-    if datetime.datetime.now() >= until:
-        LOCKED_UNTIL.pop(key, None)
-        return False
-    return True
+    if until and datetime.datetime.now() < until:
+        return True
+    LOCKED_UNTIL.pop(key, None)
+    return False
 
 
 def login() -> Optional[Dict[str, str]]:
