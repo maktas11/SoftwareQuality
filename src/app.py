@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 
 from core import backup
 from core.auth import ROLE_EMPLOYEE, ROLE_MANAGER, ROLE_SUPER, has_permission
-from core.config import ensure_data_dirs
+from core.config import DATA_DIR, ensure_data_dirs
 from core.db import init_db
 from core.logging_utils import (
     append_log,
@@ -69,6 +69,8 @@ SALARY_HINT = "YYYY-MM"
 
 FAILED_LOGIN_ATTEMPTS: Dict[str, List[datetime.datetime]] = {}
 LOCKED_UNTIL: Dict[str, datetime.datetime] = {}
+FORCE_LOGOUT_AFTER_RESTORE = False
+RESTORE_NOTICE_PATH = os.path.join(DATA_DIR, "last_restore_notice.txt")
 
 
 def log_action(user: Dict[str, str], description: str, info: str = "", suspicious: bool = False) -> None:
@@ -131,9 +133,46 @@ def is_locked_out(username: str) -> bool:
     return False
 
 
+def confirm_restore_risk() -> bool:
+    print("WARNING: Restoring a backup overwrites current database data.")
+    print("Changes made after that backup will be lost.")
+    print("Passwords and account data may revert to older values.")
+    confirm = prompt_text("Type RESTORE to continue: ")
+    return confirm == "RESTORE"
+
+
+def set_restore_notice(timestamp: str) -> None:
+    with open(RESTORE_NOTICE_PATH, "w", encoding="utf-8") as handle:
+        handle.write(timestamp)
+
+
+def get_restore_notice() -> str:
+    if not os.path.exists(RESTORE_NOTICE_PATH):
+        return ""
+    try:
+        with open(RESTORE_NOTICE_PATH, "r", encoding="utf-8") as handle:
+            return handle.read().strip()
+    except OSError:
+        return ""
+
+
+def handle_restore_success(user: Dict[str, str], backup_name: str) -> None:
+    global FORCE_LOGOUT_AFTER_RESTORE
+    FORCE_LOGOUT_AFTER_RESTORE = True
+    FAILED_LOGIN_ATTEMPTS.clear()
+    LOCKED_UNTIL.clear()
+    set_restore_notice(datetime.datetime.now().strftime("%d-%m-%Y %H:%M"))
+    log_action(user, "Backup restored", f"backup: {backup_name}")
+    print("Backup restored.")
+    print("All users are logged out. Please log in again.")
+
+
 def login() -> Optional[Dict[str, str]]:
     clear_screen()
     print("=== Login ===")
+    restore_notice = get_restore_notice()
+    if restore_notice:
+        print(f"SYSTEM NOTICE: A backup was restored on {restore_notice}. Your password may have reverted.")
     username = prompt_text("Username: ")
     password = prompt_password("Password: ")
 
@@ -514,6 +553,10 @@ def manager_menu(user: Dict[str, str]) -> None:
         elif choice == "10":
             if not ensure_permission(user, "backup.restore_with_code"):
                 continue
+            if not confirm_restore_risk():
+                print("Restore cancelled.")
+                pause()
+                continue
             code = prompt_text("Restore code: ")
             backup_name = restore_code_service.verify_and_use_code(user["id"], code)
             if not backup_name:
@@ -521,8 +564,9 @@ def manager_menu(user: Dict[str, str]) -> None:
                 print("Invalid or used code.")
             else:
                 if backup.restore_backup(backup_name):
-                    log_action(user, "Backup restored", f"backup: {backup_name}")
-                    print("Backup restored.")
+                    handle_restore_success(user, backup_name)
+                    pause()
+                    break
                 else:
                     print("Backup not found.")
             pause()
@@ -701,6 +745,10 @@ def super_menu(user: Dict[str, str]) -> None:
         elif choice == "7":
             if not ensure_permission(user, "backup.restore_any"):
                 continue
+            if not confirm_restore_risk():
+                print("Restore cancelled.")
+                pause()
+                continue
             backups = backup.list_backups()
             if not backups:
                 print("No backups available.")
@@ -709,8 +757,9 @@ def super_menu(user: Dict[str, str]) -> None:
             print("Backups: " + ", ".join(backups))
             name = prompt_text("Backup name: ")
             if backup.restore_backup(name):
-                log_action(user, "Backup restored", f"backup: {name}")
-                print("Backup restored.")
+                handle_restore_success(user, name)
+                pause()
+                break
             else:
                 print("Backup not found.")
             pause()
@@ -728,6 +777,8 @@ def super_menu(user: Dict[str, str]) -> None:
             pause()
         elif choice == "10":
             manager_menu(user)
+            if FORCE_LOGOUT_AFTER_RESTORE:
+                break
         elif choice == "0":
             log_action(user, "Logged out", "")
             break
@@ -737,12 +788,14 @@ def super_menu(user: Dict[str, str]) -> None:
 
 
 def run_app() -> None:
+    global FORCE_LOGOUT_AFTER_RESTORE
     ensure_data_dirs()
     init_db()
     while True:
         user = login()
         if not user:
             continue
+        FORCE_LOGOUT_AFTER_RESTORE = False
         notify_unread_suspicious(user)
         if user["role"] == ROLE_EMPLOYEE:
             employee_menu(user)
