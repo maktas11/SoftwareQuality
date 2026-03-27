@@ -27,6 +27,9 @@ def init_db() -> None:
         )
         """
     )
+    columns = [row[1] for row in cursor.execute("PRAGMA table_info(users)").fetchall()]
+    if "session_version" not in columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0")
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS profiles (

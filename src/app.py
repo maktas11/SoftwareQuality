@@ -48,7 +48,7 @@ from ui.prompts import (
 SUPER_USERNAME = "super_admin"
 SUPER_PASSWORD = "Admin_123?"
 
-USERNAME_HINT = "8-10 chars; starts with letter/_; letters, digits, _, ', ."
+USERNAME_HINT = "8-10 chars. First char: letter or _. Allowed: letters, digits, _, apostrophe ('), dot (.)."
 PASSWORD_HINT = "12-50 chars; lower, upper, digit, special"
 NAME_HINT = "letters, spaces, hyphens, apostrophes; up to 50"
 DOC_TYPE_HINT = "Passport or ID-Card"
@@ -90,6 +90,19 @@ def ensure_permission(user: Dict[str, str], permission: str) -> bool:
     print("Unauthorized action.")
     pause()
     return False
+
+
+def is_session_active(user: Dict[str, str]) -> bool:
+    if user.get("id") is None:
+        return True
+    current = user_service.get_user_by_id(user["id"])
+    if not current:
+        print("Your account no longer exists. Please log in again.")
+        return False
+    if current.get("session_version") != user.get("session_version"):
+        print("Your session is no longer valid. Please log in again.")
+        return False
+    return True
 
 
 def track_failed_login(username: str) -> bool:
@@ -266,6 +279,8 @@ def prompt_int(label: str) -> Optional[int]:
 
 def employee_menu(user: Dict[str, str]) -> None:
     while True:
+        if not is_session_active(user):
+            break
         clear_screen()
         print("\nEmployee Menu")
         print("1. Add claim")
@@ -328,8 +343,9 @@ def employee_menu(user: Dict[str, str]) -> None:
             password = prompt_password_until_valid("New password: ", validate_password, hint=PASSWORD_HINT)
             user_service.update_password(user["id"], password)
             log_action(user, "Password updated", "")
-            print("Password updated.")
+            print("Password updated. Please log in again.")
             pause()
+            break
         elif choice == "0":
             log_action(user, "Logged out", "")
             break
@@ -340,6 +356,8 @@ def employee_menu(user: Dict[str, str]) -> None:
 
 def manager_menu(user: Dict[str, str]) -> None:
     while True:
+        if not is_session_active(user):
+            break
         clear_screen()
         print("\nManager Menu")
         print("1. Add employee")
@@ -521,14 +539,16 @@ def manager_menu(user: Dict[str, str]) -> None:
                 password = prompt_password_until_valid("New password: ", validate_password, hint=PASSWORD_HINT)
                 user_service.update_password(user["id"], password)
                 log_action(user, "Password updated", "")
-                print("Password updated.")
+                print("Password updated. Please log in again.")
+                pause()
+                break
             else:
                 first_name = prompt_until_valid("First name: ", validate_name, hint=NAME_HINT)
                 last_name = prompt_until_valid("Last name: ", validate_name, hint=NAME_HINT)
                 employee_service.update_profile(user["id"], first_name, last_name)
                 log_action(user, "Profile updated", "")
                 print("Profile updated.")
-            pause()
+                pause()
         elif choice == "13":
             if not ensure_permission(user, "self.delete"):
                 continue
@@ -551,6 +571,8 @@ def manager_menu(user: Dict[str, str]) -> None:
 
 def super_menu(user: Dict[str, str]) -> None:
     while True:
+        if not is_session_active(user):
+            break
         clear_screen()
         print("\nSuper Admin Menu")
         print("1. Add manager")

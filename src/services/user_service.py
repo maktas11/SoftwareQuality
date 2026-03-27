@@ -38,7 +38,7 @@ def get_user_by_username(username: str) -> Optional[Dict[str, str]]:
     normalized = normalize_username(username)
     row = fetch_one(
         """
-        SELECT id, username_enc, password_hash, role_enc, last_log_read_at_enc
+        SELECT id, username_enc, password_hash, role_enc, last_log_read_at_enc, session_version
         FROM users WHERE username_hash = ?
         """,
         (deterministic_hash(normalized),),
@@ -50,6 +50,7 @@ def get_user_by_username(username: str) -> Optional[Dict[str, str]]:
             "password_hash": row[2],
             "role": decrypt_text(row[3]),
             "last_log_read_at": decrypt_text(row[4]),
+            "session_version": row[5],
         }
     return None
 
@@ -57,7 +58,7 @@ def get_user_by_username(username: str) -> Optional[Dict[str, str]]:
 def get_user_by_id(user_id: int) -> Optional[Dict[str, str]]:
     row = fetch_one(
         """
-        SELECT id, username_enc, password_hash, role_enc, last_log_read_at_enc
+        SELECT id, username_enc, password_hash, role_enc, last_log_read_at_enc, session_version
         FROM users WHERE id = ?
         """,
         (user_id,),
@@ -69,6 +70,7 @@ def get_user_by_id(user_id: int) -> Optional[Dict[str, str]]:
             "password_hash": row[2],
             "role": decrypt_text(row[3]),
             "last_log_read_at": decrypt_text(row[4]),
+            "session_version": row[5],
         }
     return None
 
@@ -81,12 +83,15 @@ def verify_user_password(username: str, password: str) -> Optional[Dict[str, str
 
 
 def update_password(user_id: int, new_password: str) -> None:
-    execute("UPDATE users SET password_hash = ? WHERE id = ?", (hash_password(new_password), user_id))
+    execute(
+        "UPDATE users SET password_hash = ?, session_version = session_version + 1 WHERE id = ?",
+        (hash_password(new_password), user_id),
+    )
 
 
 def update_role(user_id: int, role: str) -> None:
     execute(
-        "UPDATE users SET role_name = ?, role_enc = ? WHERE id = ?",
+        "UPDATE users SET role_name = ?, role_enc = ?, session_version = session_version + 1 WHERE id = ?",
         (role, encrypt_text(role), user_id),
     )
 

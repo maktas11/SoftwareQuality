@@ -11,24 +11,47 @@ def prompt_password(label: str) -> str:
     return getpass.getpass(label).strip()
 
 
-def prompt_until_valid(label: str, validator: Callable[[str], Tuple[bool, str]], allow_empty: bool = False) -> str:
+def prompt_until_valid(
+    label: str,
+    validator: Callable[[str], Tuple[bool, str]],
+    allow_empty: bool = False,
+    hint: str = "",
+) -> str:
+    shown_hint = False
     while True:
+        if hint and not shown_hint:
+            print(f"Hint: {hint}")
+            shown_hint = True
         value = input(label)
         if allow_empty and value == "":
             return value
         ok, msg = validator(value)
         if ok:
             return value
-        print(f"Invalid input: {msg}")
+        if hint:
+            print(f"Invalid input: {msg}. Hint: {hint}")
+        else:
+            print(f"Invalid input: {msg}")
 
 
-def prompt_password_until_valid(label: str, validator: Callable[[str], Tuple[bool, str]]) -> str:
+def prompt_password_until_valid(
+    label: str,
+    validator: Callable[[str], Tuple[bool, str]],
+    hint: str = "",
+) -> str:
+    shown_hint = False
     while True:
+        if hint and not shown_hint:
+            print(f"Hint: {hint}")
+            shown_hint = True
         value = getpass.getpass(label)
         ok, msg = validator(value)
         if ok:
             return value
-        print(f"Invalid input: {msg}")
+        if hint:
+            print(f"Invalid input: {msg}. Hint: {hint}")
+        else:
+            print(f"Invalid input: {msg}")
 
 
 def prompt_choice(label: str, options: dict) -> str:
