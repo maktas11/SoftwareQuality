@@ -50,9 +50,9 @@ def hash_password(password: str) -> bytes:
 
 
 def verify_password(stored: bytes, password: str) -> bool:
-    if not stored or len(stored) < 17:
-        return False
-    salt = stored[:16]
-    stored_hash = stored[16:]
-    new_hash = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 200000)
-    return hmac.compare_digest(stored_hash, new_hash)
+    if stored and len(stored) >= 17 and hmac.compare_digest(
+        stored[16:],
+        hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), stored[:16], 200000),
+    ):
+        return True
+    return False

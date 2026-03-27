@@ -43,15 +43,15 @@ def get_user_by_username(username: str) -> Optional[Dict[str, str]]:
         """,
         (deterministic_hash(normalized),),
     )
-    if not row:
-        return None
-    return {
-        "id": row[0],
-        "username": decrypt_text(row[1]),
-        "password_hash": row[2],
-        "role": decrypt_text(row[3]),
-        "last_log_read_at": decrypt_text(row[4]),
-    }
+    if row:
+        return {
+            "id": row[0],
+            "username": decrypt_text(row[1]),
+            "password_hash": row[2],
+            "role": decrypt_text(row[3]),
+            "last_log_read_at": decrypt_text(row[4]),
+        }
+    return None
 
 
 def get_user_by_id(user_id: int) -> Optional[Dict[str, str]]:
@@ -62,24 +62,22 @@ def get_user_by_id(user_id: int) -> Optional[Dict[str, str]]:
         """,
         (user_id,),
     )
-    if not row:
-        return None
-    return {
-        "id": row[0],
-        "username": decrypt_text(row[1]),
-        "password_hash": row[2],
-        "role": decrypt_text(row[3]),
-        "last_log_read_at": decrypt_text(row[4]),
-    }
+    if row:
+        return {
+            "id": row[0],
+            "username": decrypt_text(row[1]),
+            "password_hash": row[2],
+            "role": decrypt_text(row[3]),
+            "last_log_read_at": decrypt_text(row[4]),
+        }
+    return None
 
 
 def verify_user_password(username: str, password: str) -> Optional[Dict[str, str]]:
     user = get_user_by_username(username)
-    if not user:
-        return None
-    if not verify_password(user["password_hash"], password):
-        return None
-    return user
+    if user and verify_password(user["password_hash"], password):
+        return user
+    return None
 
 
 def update_password(user_id: int, new_password: str) -> None:

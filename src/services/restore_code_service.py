@@ -40,7 +40,7 @@ def verify_and_use_code(manager_user_id: int, code: str) -> Optional[str]:
 def revoke_code(code: str) -> bool:
     code_hash = deterministic_hash(code)
     row = fetch_one("SELECT id FROM restore_codes WHERE code_hash = ?", (code_hash,))
-    if not row:
-        return False
-    execute("DELETE FROM restore_codes WHERE id = ?", (row[0],))
-    return True
+    if row:
+        execute("DELETE FROM restore_codes WHERE id = ?", (row[0],))
+        return True
+    return False

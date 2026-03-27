@@ -99,74 +99,70 @@ def list_all_claims() -> List[Dict[str, str]]:
 
 def update_claim_employee(claim_id: int, employee_user_id: int, data: Dict[str, str]) -> bool:
     claim = get_claim_by_id(claim_id)
-    if not claim or claim["employee_user_id"] != employee_user_id:
-        return False
-    if claim.get("salary_batch"):
-        return False
-    new_type = data.get("claim_type", claim.get("claim_type", ""))
-    clear_travel = new_type == "Home Office"
-    execute(
-        """
-        UPDATE claims SET claim_date_enc = ?, project_number_enc = ?, claim_type_enc = ?,
-            travel_distance_enc = ?, from_zip_enc = ?, from_house_enc = ?, to_zip_enc = ?, to_house_enc = ?
-        WHERE id = ?
-        """,
-        (
-            encrypt_text(data.get("claim_date", claim.get("claim_date", ""))),
-            encrypt_text(data.get("project_number", claim.get("project_number", ""))),
-            encrypt_text(new_type),
-            encrypt_text("" if clear_travel else data.get("travel_distance", claim.get("travel_distance", ""))),
-            encrypt_text("" if clear_travel else data.get("from_zip", claim.get("from_zip", ""))),
-            encrypt_text("" if clear_travel else data.get("from_house", claim.get("from_house", ""))),
-            encrypt_text("" if clear_travel else data.get("to_zip", claim.get("to_zip", ""))),
-            encrypt_text("" if clear_travel else data.get("to_house", claim.get("to_house", ""))),
-            claim_id,
-        ),
-    )
-    return True
+    if claim and claim["employee_user_id"] == employee_user_id and not claim.get("salary_batch"):
+        new_type = data.get("claim_type", claim.get("claim_type", ""))
+        clear_travel = new_type == "Home Office"
+        execute(
+            """
+            UPDATE claims SET claim_date_enc = ?, project_number_enc = ?, claim_type_enc = ?,
+                travel_distance_enc = ?, from_zip_enc = ?, from_house_enc = ?, to_zip_enc = ?, to_house_enc = ?
+            WHERE id = ?
+            """,
+            (
+                encrypt_text(data.get("claim_date", claim.get("claim_date", ""))),
+                encrypt_text(data.get("project_number", claim.get("project_number", ""))),
+                encrypt_text(new_type),
+                encrypt_text("" if clear_travel else data.get("travel_distance", claim.get("travel_distance", ""))),
+                encrypt_text("" if clear_travel else data.get("from_zip", claim.get("from_zip", ""))),
+                encrypt_text("" if clear_travel else data.get("from_house", claim.get("from_house", ""))),
+                encrypt_text("" if clear_travel else data.get("to_zip", claim.get("to_zip", ""))),
+                encrypt_text("" if clear_travel else data.get("to_house", claim.get("to_house", ""))),
+                claim_id,
+            ),
+        )
+        return True
+    return False
 
 
 def delete_claim_employee(claim_id: int, employee_user_id: int) -> bool:
     claim = get_claim_by_id(claim_id)
-    if not claim or claim["employee_user_id"] != employee_user_id:
-        return False
-    if claim.get("salary_batch"):
-        return False
-    execute("DELETE FROM claims WHERE id = ?", (claim_id,))
-    return True
+    if claim and claim["employee_user_id"] == employee_user_id and not claim.get("salary_batch"):
+        execute("DELETE FROM claims WHERE id = ?", (claim_id,))
+        return True
+    return False
 
 
 def manager_modify_claim(claim_id: int, data: Dict[str, str]) -> bool:
     claim = get_claim_by_id(claim_id)
-    if not claim:
-        return False
-    execute(
-        """
-        UPDATE claims SET project_number_enc = ?, travel_distance_enc = ? WHERE id = ?
-        """,
-        (
-            encrypt_text(data.get("project_number", claim.get("project_number", ""))),
-            encrypt_text(data.get("travel_distance", claim.get("travel_distance", ""))),
-            claim_id,
-        ),
-    )
-    return True
+    if claim:
+        execute(
+            """
+            UPDATE claims SET project_number_enc = ?, travel_distance_enc = ? WHERE id = ?
+            """,
+            (
+                encrypt_text(data.get("project_number", claim.get("project_number", ""))),
+                encrypt_text(data.get("travel_distance", claim.get("travel_distance", ""))),
+                claim_id,
+            ),
+        )
+        return True
+    return False
 
 
 def set_approval(claim_id: int, status: str, approved_by: str, salary_batch: str) -> bool:
     claim = get_claim_by_id(claim_id)
-    if not claim:
-        return False
-    execute(
-        """
-        UPDATE claims SET approval_status_enc = ?, approved_by_enc = ?, salary_batch_enc = ?
-        WHERE id = ?
-        """,
-        (
-            encrypt_text(status),
-            encrypt_text(approved_by),
-            encrypt_text(salary_batch),
-            claim_id,
-        ),
-    )
-    return True
+    if claim:
+        execute(
+            """
+            UPDATE claims SET approval_status_enc = ?, approved_by_enc = ?, salary_batch_enc = ?
+            WHERE id = ?
+            """,
+            (
+                encrypt_text(status),
+                encrypt_text(approved_by),
+                encrypt_text(salary_batch),
+                claim_id,
+            ),
+        )
+        return True
+    return False

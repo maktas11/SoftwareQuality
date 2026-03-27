@@ -27,15 +27,15 @@ def list_backups() -> list:
 
 def restore_backup(name: str) -> bool:
     backup_path = os.path.join(BACKUP_DIR, name)
-    if not os.path.exists(backup_path):
-        return False
-    with tempfile.TemporaryDirectory() as temp_dir:
-        with zipfile.ZipFile(backup_path, "r") as zf:
-            zf.extractall(temp_dir)
-        db_source = os.path.join(temp_dir, "app.db")
-        log_source = os.path.join(temp_dir, "logs.enc")
-        if os.path.exists(db_source):
-            shutil.copy2(db_source, DB_PATH)
-        if os.path.exists(log_source):
-            shutil.copy2(log_source, LOG_PATH)
-    return True
+    if os.path.exists(backup_path):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with zipfile.ZipFile(backup_path, "r") as zf:
+                zf.extractall(temp_dir)
+            db_source = os.path.join(temp_dir, "app.db")
+            log_source = os.path.join(temp_dir, "logs.enc")
+            if os.path.exists(db_source):
+                shutil.copy2(db_source, DB_PATH)
+            if os.path.exists(log_source):
+                shutil.copy2(log_source, LOG_PATH)
+        return True
+    return False
