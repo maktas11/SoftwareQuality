@@ -22,20 +22,16 @@ def normalize_username(username: str) -> str:
 
 
 def validate_username(username: str) -> Tuple[bool, str]:
-    if not username:
-        return False, "Username is required."
     pattern = r"^(?=.{8,10}$)[A-Za-z_][A-Za-z0-9_'.]*$"
-    if re.match(pattern, username):
+    if username and re.match(pattern, username):
         return True, ""
     return False, "Username format is invalid."
 
 
 def validate_password(password: str) -> Tuple[bool, str]:
-    if not password:
-        return False, "Password is required."
-    if len(password) < 12 or len(password) > 50:
-        return False, "Password length is invalid."
     checks = [
+        password,
+        12 <= len(password) <= 50,
         re.search(r"[a-z]", password),
         re.search(r"[A-Z]", password),
         re.search(r"\d", password),
@@ -43,21 +39,17 @@ def validate_password(password: str) -> Tuple[bool, str]:
     ]
     if all(checks):
         return True, ""
-    return False, "Password must include lower, upper, digit, and special."
+    return False, "Password must be 12-50 chars with lower, upper, digit, and special."
 
 
 def validate_name(value: str) -> Tuple[bool, str]:
-    if not value or len(value) < 1:
-        return False, "Value is required."
-    if re.match(r"^[A-Za-z\-\s']{1,50}$", value):
+    if value and re.match(r"^[A-Za-z\-\s']{1,50}$", value):
         return True, ""
     return False, "Only letters, spaces, hyphens, and apostrophes allowed."
 
 
 def validate_street(value: str) -> Tuple[bool, str]:
-    if not value or len(value) < 2:
-        return False, "Street is required."
-    if re.match(r"^[A-Za-z0-9\-\s']{2,80}$", value):
+    if value and len(value) >= 2 and re.match(r"^[A-Za-z0-9\-\s']{2,80}$", value):
         return True, ""
     return False, "Street contains invalid characters."
 
@@ -71,15 +63,15 @@ def validate_date(value: str) -> Tuple[bool, str]:
 
 
 def validate_claim_date(value: str) -> Tuple[bool, str]:
-    ok, msg = validate_date(value)
-    if not ok:
-        return False, msg
-    date_value = datetime.datetime.strptime(value, "%Y-%m-%d").date()
-    today = datetime.date.today()
-    past_limit = today - datetime.timedelta(days=62)
-    future_limit = today + datetime.timedelta(days=14)
-    if past_limit <= date_value <= future_limit:
-        return True, ""
+    try:
+        date_value = datetime.datetime.strptime(value, "%Y-%m-%d").date()
+        today = datetime.date.today()
+        past_limit = today - datetime.timedelta(days=62)
+        future_limit = today + datetime.timedelta(days=14)
+        if past_limit <= date_value <= future_limit:
+            return True, ""
+    except ValueError:
+        pass
     return False, "Claim date must be within 2 months past or 14 days future."
 
 
@@ -136,9 +128,9 @@ def validate_bsn(value: str) -> Tuple[bool, str]:
 
 
 def validate_project_number(value: str) -> Tuple[bool, str]:
-    if re.match(r"^\d{2,10}$", value):
+    if re.match(r"^[1-9]\d{1,9}$", value):
         return True, ""
-    return False, "Project number must be 2-10 digits."
+    return False, "Project number must be 2-10 digits (no leading zeros)."
 
 
 def validate_travel_distance(value: str) -> Tuple[bool, str]:
