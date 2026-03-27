@@ -120,6 +120,16 @@ def validate_id_doc_number(value: str) -> Tuple[bool, str]:
         return True, ""
     return False, "Identity number format invalid."
 
+def validate_int(value: str) -> Tuple[bool, str]:
+    if not value or not value.isdigit():
+        return False, "Must be digits only."
+    try:
+        num = int(value)
+        if 0 <= num <= 999999:  # reasonable range for claim/employee IDs
+            return True, ""
+    except ValueError:
+        pass
+    return False, "Must be a valid integer in range."
 
 def validate_bsn(value: str) -> Tuple[bool, str]:
     if re.match(r"^\d{9}$", value):

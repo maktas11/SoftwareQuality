@@ -26,6 +26,7 @@ from core.validation import (
     validate_house_number,
     validate_id_doc_number,
     validate_identity_doc_type,
+    validate_int,
     validate_mobile,
     validate_name,
     validate_password,
@@ -310,11 +311,12 @@ def display_employees(records: List[Dict[str, str]]) -> None:
 
 
 def prompt_int(label: str) -> Optional[int]:
-    raw = prompt_text(label)
-    if not raw.isdigit():
-        return None
-    return int(raw)
-
+    result = prompt_until_valid(label, validate_int)
+    if result:
+        value = int(result)
+    else:
+        value = None
+    return value
 
 def employee_menu(user: Dict[str, str]) -> None:
     while True:
