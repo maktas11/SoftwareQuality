@@ -22,7 +22,7 @@ def normalize_username(username: str) -> str:
 
 
 def validate_username(username: str) -> Tuple[bool, str]:
-    pattern = r"^(?=.{8,10}$)[A-Za-z_][A-Za-z0-9_'.]*$"
+    pattern = r"^(?=.{8,10}$)[A-Za-z_](?:[A-Za-z0-9_]|[ '\-](?=[A-Za-z]))*$"
     if username and re.match(pattern, username):
         return True, ""
     return False, "Username format is invalid."
@@ -43,13 +43,13 @@ def validate_password(password: str) -> Tuple[bool, str]:
 
 
 def validate_name(value: str) -> Tuple[bool, str]:
-    if value and re.match(r"^[A-Za-z\-\s']{1,50}$", value):
+    if value and re.match(r"^[A-Za-z](?:[A-Za-z]|[ '\-](?=[A-Za-z])){0,49}$", value):
         return True, ""
     return False, "Only letters, spaces, hyphens, and apostrophes allowed."
 
 
 def validate_street(value: str) -> Tuple[bool, str]:
-    if value and len(value) >= 2 and re.match(r"^[A-Za-z0-9\-\s']{2,80}$", value):
+    if value and re.match(r"^[A-Za-z0-9](?:[A-Za-z0-9]|[ '\-](?=[A-Za-z0-9])){1,79}$", value):
         return True, ""
     return False, "Street contains invalid characters."
 
@@ -100,7 +100,11 @@ def validate_city(value: str) -> Tuple[bool, str]:
 
 
 def validate_email(value: str) -> Tuple[bool, str]:
-    if re.match(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$", value):
+    if re.match(
+        r"^(?!.*\.\.)(?!.*@\.)[A-Za-z0-9](?:[A-Za-z0-9._%+-]{0,62}[A-Za-z0-9])?@"
+        r"(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,}$",
+        value,
+    ):
         return True, ""
     return False, "Email format invalid."
 
@@ -156,9 +160,9 @@ def validate_claim_type(value: str) -> Tuple[bool, str]:
 
 
 def validate_salary_batch(value: str) -> Tuple[bool, str]:
-    if re.match(r"^\d{4}-\d{2}$", value):
+    if re.match(r"^\d{4}-(0[1-9]|1[0-2])$", value):
         return True, ""
-    return False, "Salary batch must be YYYY-MM."
+    return False, "Salary batch must be YYYY-MM with month 01-12."
 
 
 def validate_identity_doc_type(value: str) -> Tuple[bool, str]:

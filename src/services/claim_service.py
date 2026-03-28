@@ -1,7 +1,7 @@
 from typing import Dict, List, Optional
 
 from core.crypto import decrypt_text, encrypt_text
-from core.db import execute, fetch_all, fetch_one, get_connection
+from core.db import execute, execute_insert, fetch_all, fetch_one
 
 
 APPROVAL_PENDING = "Pending"
@@ -10,9 +10,7 @@ APPROVAL_REJECTED = "Rejected"
 
 
 def create_claim(employee_user_id: int, data: Dict[str, str]) -> int:
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(
+    return execute_insert(
         """
         INSERT INTO claims (
             employee_user_id, claim_date_enc, project_number_enc, claim_type_enc,
@@ -33,10 +31,6 @@ def create_claim(employee_user_id: int, data: Dict[str, str]) -> int:
             encrypt_text(APPROVAL_PENDING),
         ),
     )
-    conn.commit()
-    claim_id = cur.lastrowid
-    conn.close()
-    return int(claim_id)
 
 
 def _decrypt_claim_row(row) -> Dict[str, str]:

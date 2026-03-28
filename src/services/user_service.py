@@ -1,8 +1,9 @@
 import datetime
+import sqlite3
 from typing import Dict, Optional
 
 from core.crypto import decrypt_text, deterministic_hash, encrypt_text, hash_password, verify_password
-from core.db import execute, fetch_all, fetch_one
+from core.db import DatabaseOperationError, execute, execute_insert, execute_many, fetch_all, fetch_one
 from core.validation import normalize_username
 
 
@@ -10,22 +11,25 @@ def create_user(username: str, password: str, role: str) -> int:
     normalized = normalize_username(username)
     username_hash = deterministic_hash(normalized)
     created_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    execute(
-        """
-        INSERT INTO users (username_enc, username_hash, password_hash, role_name, role_enc, created_at_enc)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        (
-            encrypt_text(username),
-            username_hash,
-            hash_password(password),
-            role,
-            encrypt_text(role),
-            encrypt_text(created_at),
-        ),
-    )
-    row = fetch_one("SELECT id FROM users WHERE username_hash = ?", (username_hash,))
-    return int(row[0])
+    try:
+        return execute_insert(
+            """
+            INSERT INTO users (username_enc, username_hash, password_hash, role_name, role_enc, created_at_enc)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                encrypt_text(username),
+                username_hash,
+                hash_password(password),
+                role,
+                encrypt_text(role),
+                encrypt_text(created_at),
+            ),
+        )
+    except DatabaseOperationError as exc:
+        if isinstance(exc.original, sqlite3.IntegrityError):
+            raise ValueError("Username already exists.") from exc
+        raise
 
 
 def username_exists(username: str) -> bool:
@@ -104,11 +108,15 @@ def update_last_log_read(user_id: int, timestamp: str) -> None:
 
 
 def delete_user(user_id: int) -> None:
-    execute("DELETE FROM claims WHERE employee_user_id = ?", (user_id,))
-    execute("DELETE FROM restore_codes WHERE manager_user_id = ?", (user_id,))
-    execute("DELETE FROM profiles WHERE user_id = ?", (user_id,))
-    execute("DELETE FROM employees WHERE user_id = ?", (user_id,))
-    execute("DELETE FROM users WHERE id = ?", (user_id,))
+    execute_many(
+        [
+            ("DELETE FROM claims WHERE employee_user_id = ?", (user_id,)),
+            ("DELETE FROM restore_codes WHERE manager_user_id = ?", (user_id,)),
+            ("DELETE FROM profiles WHERE user_id = ?", (user_id,)),
+            ("DELETE FROM employees WHERE user_id = ?", (user_id,)),
+            ("DELETE FROM users WHERE id = ?", (user_id,)),
+        ]
+    )
 
 
 def list_users_by_role(role: str) -> list:

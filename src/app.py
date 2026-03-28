@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 from core import backup
 from core.auth import ROLE_EMPLOYEE, ROLE_MANAGER, ROLE_SUPER, has_permission
 from core.config import DATA_DIR, ensure_data_dirs
-from core.db import init_db
+from core.db import DatabaseOperationError, init_db
 from core.logging_utils import (
     append_log,
     count_unread_suspicious,
@@ -429,7 +429,12 @@ def manager_menu(user: Dict[str, str]) -> None:
             password = prompt_password_until_valid("Password: ", validate_password, hint=PASSWORD_HINT)
             first_name = prompt_until_valid("First name: ", validate_name, hint=NAME_HINT)
             last_name = prompt_until_valid("Last name: ", validate_name, hint=NAME_HINT)
-            user_id = user_service.create_user(username, password, ROLE_EMPLOYEE)
+            try:
+                user_id = user_service.create_user(username, password, ROLE_EMPLOYEE)
+            except ValueError as exc:
+                print(str(exc))
+                pause()
+                continue
             registration_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             employee_service.create_profile(user_id, first_name, last_name, registration_date)
             employee_id = employee_service.create_employee(user_id, prompt_employee_data())
@@ -646,7 +651,12 @@ def super_menu(user: Dict[str, str]) -> None:
             password = prompt_password_until_valid("Password: ", validate_password, hint=PASSWORD_HINT)
             first_name = prompt_until_valid("First name: ", validate_name, hint=NAME_HINT)
             last_name = prompt_until_valid("Last name: ", validate_name, hint=NAME_HINT)
-            user_id = user_service.create_user(username, password, ROLE_MANAGER)
+            try:
+                user_id = user_service.create_user(username, password, ROLE_MANAGER)
+            except ValueError as exc:
+                print(str(exc))
+                pause()
+                continue
             registration_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             employee_service.create_profile(user_id, first_name, last_name, registration_date)
             log_action(user, "Manager created", f"username: {username}")
@@ -792,22 +802,33 @@ def super_menu(user: Dict[str, str]) -> None:
 def run_app() -> None:
     global FORCE_LOGOUT_AFTER_RESTORE
     ensure_data_dirs()
-    init_db()
+    try:
+        init_db()
+    except DatabaseOperationError as exc:
+        print("Database initialization failed. Please contact an administrator.")
+        append_log("system", "DB initialization failed", str(exc), True)
+        return
+
     while True:
-        user = login()
-        if not user:
-            continue
-        FORCE_LOGOUT_AFTER_RESTORE = False
-        notify_unread_suspicious(user)
-        if user["role"] == ROLE_EMPLOYEE:
-            employee_menu(user)
-        elif user["role"] == ROLE_MANAGER:
-            manager_menu(user)
-        elif user["role"] == ROLE_SUPER:
-            super_menu(user)
-        else:
-            print("Unknown role.")
-            break
+        try:
+            user = login()
+            if not user:
+                continue
+            FORCE_LOGOUT_AFTER_RESTORE = False
+            notify_unread_suspicious(user)
+            if user["role"] == ROLE_EMPLOYEE:
+                employee_menu(user)
+            elif user["role"] == ROLE_MANAGER:
+                manager_menu(user)
+            elif user["role"] == ROLE_SUPER:
+                super_menu(user)
+            else:
+                print("Unknown role.")
+                break
+        except DatabaseOperationError as exc:
+            append_log("system", "Database error", str(exc), True)
+            print("A database error occurred. Please try again.")
+            pause()
 
 
 if __name__ == "__main__":
