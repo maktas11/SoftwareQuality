@@ -173,7 +173,10 @@ def login() -> Optional[Dict[str, str]]:
     restore_notice = get_restore_notice()
     if restore_notice:
         print(f"SYSTEM NOTICE: A backup was restored on {restore_notice}. Your password may have reverted.")
+    print("Type exit to quit.")
     username = prompt_text("Username: ")
+    if username == "exit":
+        return "EXIT"
     password = prompt_password("Password: ")
 
     if is_locked_out(username):
@@ -811,6 +814,8 @@ def run_app() -> None:
     while True:
         try:
             user = login()
+            if user == "EXIT":
+                break
             if not user:
                 continue
             FORCE_LOGOUT_AFTER_RESTORE = False

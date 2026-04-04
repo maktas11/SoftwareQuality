@@ -2,6 +2,7 @@ import sqlite3
 from typing import Any, List, Optional, Sequence, Tuple
 
 from core.config import DB_PATH
+from core.crypto import deterministic_hash
 
 
 class DatabaseOperationError(Exception):
@@ -20,6 +21,16 @@ def get_connection() -> sqlite3.Connection:
         raise DatabaseOperationError("get_connection", exc) from exc
 
 
+def _migrate_role_name_to_hash(cursor) -> None:
+    rows = cursor.execute("SELECT id, role_hash FROM users").fetchall()
+    for row in rows:
+        user_id, plaintext_role = row[0], row[1]
+        cursor.execute(
+            "UPDATE users SET role_hash = ? WHERE id = ?",
+            (deterministic_hash(plaintext_role), user_id),
+        )
+
+
 def init_db() -> None:
     try:
         with get_connection() as conn:
@@ -31,7 +42,7 @@ def init_db() -> None:
                     username_enc BLOB NOT NULL,
                     username_hash TEXT NOT NULL UNIQUE,
                     password_hash BLOB NOT NULL,
-                    role_name TEXT NOT NULL,
+                    role_hash TEXT NOT NULL,
                     role_enc BLOB NOT NULL,
                     created_at_enc BLOB NOT NULL,
                     last_log_read_at_enc BLOB
@@ -41,6 +52,9 @@ def init_db() -> None:
             columns = [row[1] for row in cursor.execute("PRAGMA table_info(users)").fetchall()]
             if "session_version" not in columns:
                 cursor.execute("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0")
+            if "role_name" in columns:
+                cursor.execute("ALTER TABLE users RENAME COLUMN role_name TO role_hash")
+                _migrate_role_name_to_hash(cursor)
             cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS profiles (

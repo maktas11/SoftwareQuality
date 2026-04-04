@@ -12,14 +12,14 @@ def create_user(username: str, password: str, role: str) -> int:
     try:
         user_id = execute_insert(
             """
-            INSERT INTO users (username_enc, username_hash, password_hash, role_name, role_enc, created_at_enc)
+            INSERT INTO users (username_enc, username_hash, password_hash, role_hash, role_enc, created_at_enc)
             VALUES (?, ?, ?, ?, ?, ?)
             """,
             (
                 encrypt_text(username),
                 username_hash,
                 hash_password(password),
-                role,
+                deterministic_hash(role),
                 encrypt_text(role),
                 encrypt_text(created_at),
             ),
@@ -96,8 +96,8 @@ def update_password(user_id: int, new_password: str) -> None:
 
 def update_role(user_id: int, role: str) -> None:
     execute(
-        "UPDATE users SET role_name = ?, role_enc = ?, session_version = session_version + 1 WHERE id = ?",
-        (role, encrypt_text(role), user_id),
+        "UPDATE users SET role_hash = ?, role_enc = ?, session_version = session_version + 1 WHERE id = ?",
+        (deterministic_hash(role), encrypt_text(role), user_id),
     )
 
 
@@ -123,9 +123,9 @@ def delete_user(user_id: int) -> None:
 def list_users_by_role(role: str) -> list:
     rows = fetch_all(
         """
-        SELECT id, username_enc FROM users WHERE role_name = ?
+        SELECT id, username_enc FROM users WHERE role_hash = ?
         """,
-        (role,),
+        (deterministic_hash(role),),
     )
     results = [{"id": r[0], "username": decrypt_text(r[1])} for r in rows]
     return results
