@@ -6,8 +6,15 @@ import zipfile
 
 from core.config import BACKUP_DIR, DB_PATH, LOG_PATH
 
+# --- Backup system ---
+# Backups include the database and the encrypted log file.
+# Since the DB already stores everything encrypted (Fernet) and passwords
+# are hashed (PBKDF2), no extra encryption is needed for the zip —
+# the data inside is already unreadable without the encryption key.
+
 
 def create_backup() -> str:
+    # Timestamped name ensures multiple backups can coexist without overwriting.
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     name = f"backup_{timestamp}.zip"
     backup_path = os.path.join(BACKUP_DIR, name)
@@ -26,6 +33,10 @@ def list_backups() -> list:
 
 
 def restore_backup(name: str) -> bool:
+    # Extracts to a temp directory first, then copies the DB file over.
+    # Using a temp dir avoids partial restores if extraction fails halfway.
+    # After restore, users are forced to re-login (handled in app.py)
+    # because session data and passwords may have changed.
     backup_path = os.path.join(BACKUP_DIR, name)
     if os.path.exists(backup_path):
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -45,6 +45,8 @@ from ui.prompts import (
     prompt_until_valid,
 )
 
+# Hard-coded super admin credentials (required by the assignment spec).
+# In a real system this would be stored securely or set during first-run setup.
 SUPER_USERNAME = "super_admin"
 SUPER_PASSWORD = "Admin_123?"
 
@@ -67,6 +69,9 @@ CLAIM_TYPE_HINT = "Travel or Home Office"
 TRAVEL_HINT = "1-6 digits"
 SALARY_HINT = "YYYY-MM"
 
+# --- Brute-force protection ---
+# Track failed login attempts per username. After 5 failures within 5 minutes
+# the account gets temporarily locked. This stops automated password guessing.
 FAILED_LOGIN_ATTEMPTS: Dict[str, List[datetime.datetime]] = {}
 LOCKED_UNTIL: Dict[str, datetime.datetime] = {}
 FORCE_LOGOUT_AFTER_RESTORE = False
@@ -74,6 +79,8 @@ RESTORE_NOTICE_PATH = os.path.join(DATA_DIR, "last_restore_notice.txt")
 
 
 def log_action(user: Dict[str, str], description: str, info: str = "", suspicious: bool = False) -> None:
+    # Wrapper that's called from every action in the app — login, CRUD, errors, etc.
+    # The suspicious flag triggers alerts for managers/admins on their next login.
     append_log(user.get("username", ""), description, info, suspicious)
 
 
@@ -86,6 +93,9 @@ def pause() -> None:
 
 
 def ensure_permission(user: Dict[str, str], permission: str) -> bool:
+    # Central authorization gate — every menu action calls this first.
+    # If the user doesn't have the required permission, the attempt is
+    # logged as suspicious and the action is blocked.
     if has_permission(user["role"], permission):
         return True
     log_action(user, "Unauthorized access", f"permission: {permission}", True)
@@ -95,6 +105,12 @@ def ensure_permission(user: Dict[str, str], permission: str) -> bool:
 
 
 def is_session_active(user: Dict[str, str]) -> bool:
+    # Session validation runs before every menu iteration.
+    # Checks two things:
+    # 1. Does the user still exist? (could have been deleted by admin)
+    # 2. Has session_version changed? (means password was reset or role changed —
+    #    the old session should no longer be valid)
+    # This prevents "ghost sessions" where a deleted or modified user keeps access.
     if user.get("id") is None:
         return True
     current = user_service.get_user_by_id(user["id"])
@@ -108,6 +124,11 @@ def is_session_active(user: Dict[str, str]) -> bool:
 
 
 def track_failed_login(username: str) -> bool:
+    # Sliding window: only count failures from the last 5 minutes.
+    # After 5 failures -> lock the account for 5 minutes.
+    # Returns True (suspicious) after 3+ failures so we can flag it in the log.
+    # This makes brute-force attacks impractical — attacker can only try
+    # 5 passwords every 5 minutes per username.
     now = datetime.datetime.now()
     key = username
     FAILED_LOGIN_ATTEMPTS.setdefault(key, [])
@@ -134,6 +155,8 @@ def is_locked_out(username: str) -> bool:
 
 
 def confirm_restore_risk() -> bool:
+    # Requires the user to type "RESTORE" exactly — prevents accidental restores.
+    # This is a destructive action that can't be undone, so we want explicit consent.
     print("WARNING: Restoring a backup overwrites current database data.")
     print("Changes made after that backup will be lost.")
     print("Passwords and account data may revert to older values.")
@@ -157,6 +180,10 @@ def get_restore_notice() -> str:
 
 
 def handle_restore_success(user: Dict[str, str], backup_name: str) -> None:
+    # After a restore, force everyone (including the current user) to re-login.
+    # The restored DB might have different passwords, roles, or users —
+    # continuing with the old session would be a security risk.
+    # Also clear lockout state since the old failed-attempt data is stale.
     global FORCE_LOGOUT_AFTER_RESTORE
     FORCE_LOGOUT_AFTER_RESTORE = True
     FAILED_LOGIN_ATTEMPTS.clear()
@@ -177,13 +204,17 @@ def login() -> Optional[Dict[str, str]]:
     username = prompt_text("Username: ")
     if username == "exit":
         return "EXIT"
+    # Password input is masked using getpass — characters are not echoed to screen.
     password = prompt_password("Password: ")
 
+    # Check lockout BEFORE attempting authentication — don't even try to verify
+    # the password if the account is locked, to prevent timing-based info leaks.
     if is_locked_out(username):
         log_action({"username": username}, "Login locked", "Too many attempts", True)
         print("Account temporarily locked. Try again later.")
         return None
 
+    # Super admin uses hardcoded credentials (assignment requirement).
     if username == SUPER_USERNAME:
         if password == SUPER_PASSWORD:
             clear_failed_login(username)
@@ -192,6 +223,8 @@ def login() -> Optional[Dict[str, str]]:
             return user
         suspicious = track_failed_login(username)
         log_action({"username": username}, "Unsuccessful login", f"username: {username}", suspicious)
+        # Generic error message — we don't say "wrong password" vs "wrong username"
+        # because that would let attackers confirm valid usernames.
         print("Invalid credentials.")
         return None
 
@@ -201,6 +234,7 @@ def login() -> Optional[Dict[str, str]]:
         log_action(user, "Logged in", "")
         return user
 
+    # Failed login — track it and check if it's becoming suspicious (3+ attempts).
     suspicious = track_failed_login(username)
     log_action({"username": username}, "Unsuccessful login", f"username: {username}", suspicious)
     print("Invalid credentials.")
@@ -208,6 +242,9 @@ def login() -> Optional[Dict[str, str]]:
 
 
 def notify_unread_suspicious(user: Dict[str, str]) -> None:
+    # Alert for managers and super admin right after login —
+    # shows how many suspicious events happened since they last checked the logs.
+    # This way security incidents don't go unnoticed.
     if user["role"] == ROLE_SUPER:
         last_read = get_super_last_read()
     else:
@@ -321,6 +358,10 @@ def prompt_int(label: str) -> Optional[int]:
     return value
 
 def employee_menu(user: Dict[str, str]) -> None:
+    # Every loop iteration re-checks session validity (is_session_active)
+    # and every action re-checks permissions (ensure_permission).
+    # Double-checking like this is "defense in depth" — even if the menu
+    # is somehow reached by the wrong role, the permission check blocks it.
     while True:
         if not is_session_active(user):
             break
@@ -351,6 +392,8 @@ def employee_menu(user: Dict[str, str]) -> None:
                 pause()
                 continue
             data = prompt_claim_data()
+            # The service layer verifies ownership (user["id"] must match the claim's
+            # employee_user_id) — so an employee can't update someone else's claim.
             if claim_service.update_claim_employee(claim_id, user["id"], data):
                 log_action(user, "Claim updated", f"claim_id: {claim_id}")
                 print("Claim updated.")
@@ -491,6 +534,9 @@ def manager_menu(user: Dict[str, str]) -> None:
                 print("User is not an employee.")
                 pause()
                 continue
+            # Temporary password for reset — shown once and must be changed by the user.
+            # update_password also bumps session_version, kicking the employee out
+            # of any active session immediately.
             temp_pw = "Temp_" + datetime.datetime.now().strftime("%H%M%S")
             user_service.update_password(target["id"], temp_pw)
             log_action(user, "Employee password reset", f"username: {username}")
@@ -807,6 +853,8 @@ def run_app() -> None:
     try:
         init_db()
     except DatabaseOperationError as exc:
+        # Show a generic message — don't expose the actual DB error to the user.
+        # The real error is logged for admin review.
         print("Database initialization failed. Please contact an administrator.")
         append_log("system", "DB initialization failed", str(exc), True)
         return
@@ -819,7 +867,11 @@ def run_app() -> None:
             if not user:
                 continue
             FORCE_LOGOUT_AFTER_RESTORE = False
+            # Check for suspicious activity right after login so admins see it immediately.
             notify_unread_suspicious(user)
+            # Route to the correct menu based on role — each menu only shows
+            # options relevant to that role, and every option still re-checks
+            # permissions through ensure_permission() as a safety net.
             if user["role"] == ROLE_EMPLOYEE:
                 employee_menu(user)
             elif user["role"] == ROLE_MANAGER:
@@ -830,6 +882,8 @@ def run_app() -> None:
                 print("Unknown role.")
                 break
         except DatabaseOperationError as exc:
+            # Catch-all for unexpected DB errors — log them as suspicious
+            # (could indicate tampering or corruption) and show a safe message.
             append_log("system", "Database error", str(exc), True)
             print("A database error occurred. Please try again.")
             pause()

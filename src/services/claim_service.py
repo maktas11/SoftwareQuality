@@ -3,13 +3,16 @@ from typing import Dict, List, Optional
 from core.crypto import decrypt_text, encrypt_text
 from core.db import execute, execute_insert, fetch_all, fetch_one
 
-
+# Approval statuses — using constants instead of string literals throughout
+# the code to avoid typos that could bypass status checks.
 APPROVAL_PENDING = "Pending"
 APPROVAL_APPROVED = "Approved"
 APPROVAL_REJECTED = "Rejected"
 
 
 def create_claim(employee_user_id: int, data: Dict[str, str]) -> int:
+    # All claim data is encrypted before insertion — dates, amounts, zip codes, etc.
+    # New claims always start as "Pending" — employees can't set their own approval.
     claim_id = execute_insert(
         """
         INSERT INTO claims (
@@ -97,6 +100,10 @@ def list_all_claims() -> List[Dict[str, str]]:
 
 
 def update_claim_employee(claim_id: int, employee_user_id: int, data: Dict[str, str]) -> bool:
+    # Authorization check: employee can only update their OWN claims.
+    # We verify employee_user_id matches the claim's owner at the service level.
+    # Also, once a salary_batch is set (claim processed), it becomes immutable —
+    # this prevents employees from modifying claims after they've been paid out.
     claim = get_claim_by_id(claim_id)
     success = False
     if claim and claim["employee_user_id"] == employee_user_id and not claim.get("salary_batch"):
@@ -125,6 +132,7 @@ def update_claim_employee(claim_id: int, employee_user_id: int, data: Dict[str, 
 
 
 def delete_claim_employee(claim_id: int, employee_user_id: int) -> bool:
+    # Same ownership + salary_batch check as update — can't delete processed claims.
     claim = get_claim_by_id(claim_id)
     success = False
     if claim and claim["employee_user_id"] == employee_user_id and not claim.get("salary_batch"):
@@ -134,6 +142,8 @@ def delete_claim_employee(claim_id: int, employee_user_id: int) -> bool:
 
 
 def manager_modify_claim(claim_id: int, data: Dict[str, str]) -> bool:
+    # Managers can only change project_number and travel_distance (as per spec).
+    # They can't touch claim_date, claim_type, or other employee-entered fields.
     claim = get_claim_by_id(claim_id)
     success = False
     if claim:
@@ -152,6 +162,8 @@ def manager_modify_claim(claim_id: int, data: Dict[str, str]) -> bool:
 
 
 def set_approval(claim_id: int, status: str, approved_by: str, salary_batch: str) -> bool:
+    # Records who approved/rejected the claim (approved_by is set automatically
+    # from the logged-in manager's username — the user can't spoof this).
     claim = get_claim_by_id(claim_id)
     success = False
     if claim:

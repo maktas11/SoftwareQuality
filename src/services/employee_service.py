@@ -3,6 +3,12 @@ from typing import Dict, List, Optional
 from core.crypto import decrypt_text, encrypt_text
 from core.db import execute, fetch_all, fetch_one
 
+# --- Employee data protection ---
+# All personal data (name, address, BSN, email, etc.) is encrypted before
+# storing in the database. This satisfies the requirement that opening the
+# .db file with an external tool (like DB Browser for SQLite) shows only
+# unreadable binary blobs, not plaintext personal information.
+
 
 def create_profile(user_id: int, first_name: str, last_name: str, registration_date: str) -> None:
     execute(
@@ -34,6 +40,8 @@ def generate_employee_id(user_id: int) -> str:
 
 
 def create_employee(user_id: int, data: Dict[str, str]) -> str:
+    # Every field is individually encrypted with Fernet so that each column
+    # in the DB is an independent ciphertext. Even the employee ID is encrypted.
     employee_id = generate_employee_id(user_id)
     execute(
         """
@@ -142,6 +150,9 @@ def list_employee_records() -> List[Dict[str, str]]:
 
 
 def search_employees(term: str) -> List[Dict[str, str]]:
+    # Search happens in Python after decryption, not in SQL — because the data
+    # is encrypted in the DB, we can't use SQL LIKE or WHERE on encrypted columns.
+    # This supports partial key search (e.g. searching "Amst" matches "Amsterdam").
     term_lower = term.lower()
     results = []
     for row in list_employee_records():

@@ -5,6 +5,8 @@ from core.config import DB_PATH
 from core.crypto import deterministic_hash
 
 
+# Custom exception wraps raw sqlite3 errors so they never leak
+# internal details (table names, query text) to the user interface.
 class DatabaseOperationError(Exception):
     def __init__(self, operation: str, original: Exception):
         self.operation = operation
@@ -15,6 +17,8 @@ class DatabaseOperationError(Exception):
 def get_connection() -> sqlite3.Connection:
     try:
         conn = sqlite3.connect(DB_PATH)
+        # Enforce foreign key constraints — SQLite has them off by default.
+        # Without this, deleting a user wouldn't cascade-delete their claims, etc.
         conn.execute("PRAGMA foreign_keys = ON")
         return conn
     except sqlite3.Error as exc:
@@ -32,9 +36,19 @@ def _migrate_role_name_to_hash(cursor) -> None:
 
 
 def init_db() -> None:
+    # --- Database schema design for security ---
+    # Sensitive columns are stored as BLOB (encrypted with Fernet).
+    # For fields we need to query on (username, role), we store a
+    # deterministic HMAC hash alongside the encrypted value.
+    # This way we can do efficient lookups without decrypting every row,
+    # but the actual data is still unreadable outside the application.
     try:
         with get_connection() as conn:
             cursor = conn.cursor()
+            # username_enc: encrypted username (for display after decryption)
+            # username_hash: HMAC hash of username (for WHERE clause lookups)
+            # password_hash: PBKDF2 salted hash — NOT encryption, one-way only
+            # role_enc / role_hash: same pattern — encrypted for display, hashed for queries
             cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS users (
@@ -67,6 +81,8 @@ def init_db() -> None:
                 )
                 """
             )
+            # All personal employee data (birthday, BSN, email, etc.) is encrypted.
+            # Opening the .db file with a SQLite browser will only show binary blobs.
             cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS employees (
@@ -88,6 +104,7 @@ def init_db() -> None:
                 )
                 """
             )
+            # Claim data is also fully encrypted at rest — dates, amounts, zip codes, etc.
             cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS claims (
@@ -108,6 +125,8 @@ def init_db() -> None:
                 )
                 """
             )
+            # Restore codes are hashed (not stored in plaintext) so even with
+            # DB access you can't see valid codes — same idea as password hashing.
             cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS restore_codes (
@@ -124,6 +143,12 @@ def init_db() -> None:
     except sqlite3.Error as exc:
         raise DatabaseOperationError("init_db", exc) from exc
 
+
+# --- SQL injection prevention ---
+# Every function below uses parameterized queries (the ? placeholders).
+# User input is NEVER concatenated into the SQL string.
+# sqlite3 handles escaping internally, so even if someone types
+# something like ' OR 1=1 -- it just gets treated as a literal value.
 
 def execute(query: str, params: Tuple = ()) -> None:
     try:
@@ -145,6 +170,9 @@ def execute_insert(query: str, params: Tuple = ()) -> int:
 
 
 def execute_many(statements: Sequence[Tuple[str, Tuple]]) -> None:
+    # Runs multiple statements in a single transaction (atomic).
+    # If any statement fails the whole batch rolls back — important for
+    # cascading deletes so we don't end up with orphaned records.
     try:
         with get_connection() as conn:
             cur = conn.cursor()
