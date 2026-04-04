@@ -102,11 +102,17 @@ def list_all_claims() -> List[Dict[str, str]]:
 def update_claim_employee(claim_id: int, employee_user_id: int, data: Dict[str, str]) -> bool:
     # Authorization check: employee can only update their OWN claims.
     # We verify employee_user_id matches the claim's owner at the service level.
-    # Also, once a salary_batch is set (claim processed), it becomes immutable —
-    # this prevents employees from modifying claims after they've been paid out.
+    # Also blocked if the claim already has a salary_batch (processed/paid out)
+    # or if the approval status is not "Pending" — once a manager has approved
+    # or rejected a claim, the employee shouldn't be able to silently change it.
     claim = get_claim_by_id(claim_id)
     success = False
-    if claim and claim["employee_user_id"] == employee_user_id and not claim.get("salary_batch"):
+    if (
+        claim
+        and claim["employee_user_id"] == employee_user_id
+        and not claim.get("salary_batch")
+        and claim.get("approval_status") == APPROVAL_PENDING
+    ):
         new_type = data.get("claim_type", claim.get("claim_type", ""))
         clear_travel = new_type == "Home Office"
         execute(
@@ -132,10 +138,16 @@ def update_claim_employee(claim_id: int, employee_user_id: int, data: Dict[str, 
 
 
 def delete_claim_employee(claim_id: int, employee_user_id: int) -> bool:
-    # Same ownership + salary_batch check as update — can't delete processed claims.
+    # Same checks as update — ownership, no salary_batch, and must still be "Pending".
+    # Can't delete a claim that a manager already reviewed.
     claim = get_claim_by_id(claim_id)
     success = False
-    if claim and claim["employee_user_id"] == employee_user_id and not claim.get("salary_batch"):
+    if (
+        claim
+        and claim["employee_user_id"] == employee_user_id
+        and not claim.get("salary_batch")
+        and claim.get("approval_status") == APPROVAL_PENDING
+    ):
         execute("DELETE FROM claims WHERE id = ?", (claim_id,))
         success = True
     return success
