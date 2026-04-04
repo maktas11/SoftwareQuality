@@ -4,15 +4,13 @@ from typing import Dict, Optional
 
 from core.crypto import decrypt_text, deterministic_hash, encrypt_text, hash_password, verify_password
 from core.db import DatabaseOperationError, execute, execute_insert, execute_many, fetch_all, fetch_one
-from core.validation import normalize_username
 
 
 def create_user(username: str, password: str, role: str) -> int:
-    normalized = normalize_username(username)
-    username_hash = deterministic_hash(normalized)
+    username_hash = deterministic_hash(username)
     created_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     try:
-        return execute_insert(
+        user_id = execute_insert(
             """
             INSERT INTO users (username_enc, username_hash, password_hash, role_name, role_enc, created_at_enc)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -26,6 +24,7 @@ def create_user(username: str, password: str, role: str) -> int:
                 encrypt_text(created_at),
             ),
         )
+        return user_id
     except DatabaseOperationError as exc:
         if isinstance(exc.original, sqlite3.IntegrityError):
             raise ValueError("Username already exists.") from exc
@@ -33,22 +32,22 @@ def create_user(username: str, password: str, role: str) -> int:
 
 
 def username_exists(username: str) -> bool:
-    normalized = normalize_username(username)
-    row = fetch_one("SELECT id FROM users WHERE username_hash = ?", (deterministic_hash(normalized),))
-    return row is not None
+    row = fetch_one("SELECT id FROM users WHERE username_hash = ?", (deterministic_hash(username),))
+    result = row is not None
+    return result
 
 
 def get_user_by_username(username: str) -> Optional[Dict[str, str]]:
-    normalized = normalize_username(username)
     row = fetch_one(
         """
         SELECT id, username_enc, password_hash, role_enc, last_log_read_at_enc, session_version
         FROM users WHERE username_hash = ?
         """,
-        (deterministic_hash(normalized),),
+        (deterministic_hash(username),),
     )
+    result = None
     if row:
-        return {
+        result = {
             "id": row[0],
             "username": decrypt_text(row[1]),
             "password_hash": row[2],
@@ -56,7 +55,7 @@ def get_user_by_username(username: str) -> Optional[Dict[str, str]]:
             "last_log_read_at": decrypt_text(row[4]),
             "session_version": row[5],
         }
-    return None
+    return result
 
 
 def get_user_by_id(user_id: int) -> Optional[Dict[str, str]]:
@@ -67,8 +66,9 @@ def get_user_by_id(user_id: int) -> Optional[Dict[str, str]]:
         """,
         (user_id,),
     )
+    result = None
     if row:
-        return {
+        result = {
             "id": row[0],
             "username": decrypt_text(row[1]),
             "password_hash": row[2],
@@ -76,14 +76,15 @@ def get_user_by_id(user_id: int) -> Optional[Dict[str, str]]:
             "last_log_read_at": decrypt_text(row[4]),
             "session_version": row[5],
         }
-    return None
+    return result
 
 
 def verify_user_password(username: str, password: str) -> Optional[Dict[str, str]]:
     user = get_user_by_username(username)
+    result = None
     if user and verify_password(user["password_hash"], password):
-        return user
-    return None
+        result = user
+    return result
 
 
 def update_password(user_id: int, new_password: str) -> None:
@@ -126,4 +127,5 @@ def list_users_by_role(role: str) -> list:
         """,
         (role,),
     )
-    return [{"id": r[0], "username": decrypt_text(r[1])} for r in rows]
+    results = [{"id": r[0], "username": decrypt_text(r[1])} for r in rows]
+    return results

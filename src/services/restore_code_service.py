@@ -29,18 +29,18 @@ def verify_and_use_code(manager_user_id: int, code: str) -> Optional[str]:
         """,
         (code_hash, manager_user_id),
     )
-    if not row:
-        return None
-    if int(row[2]) == 1:
-        return None
-    execute("UPDATE restore_codes SET used = 1 WHERE id = ?", (row[0],))
-    return decrypt_text(row[1])
+    result = None
+    if row and int(row[2]) != 1:
+        execute("UPDATE restore_codes SET used = 1 WHERE id = ?", (row[0],))
+        result = decrypt_text(row[1])
+    return result
 
 
 def revoke_code(code: str) -> bool:
     code_hash = deterministic_hash(code)
     row = fetch_one("SELECT id FROM restore_codes WHERE code_hash = ?", (code_hash,))
+    result = False
     if row:
         execute("DELETE FROM restore_codes WHERE id = ?", (row[0],))
-        return True
-    return False
+        result = True
+    return result

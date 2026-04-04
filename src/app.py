@@ -16,7 +16,6 @@ from core.logging_utils import (
 from core.validation import (
     CITY_OPTIONS,
     format_mobile,
-    normalize_username,
     validate_bsn,
     validate_claim_date,
     validate_claim_type,
@@ -110,7 +109,7 @@ def is_session_active(user: Dict[str, str]) -> bool:
 
 def track_failed_login(username: str) -> bool:
     now = datetime.datetime.now()
-    key = normalize_username(username)
+    key = username
     FAILED_LOGIN_ATTEMPTS.setdefault(key, [])
     FAILED_LOGIN_ATTEMPTS[key] = [t for t in FAILED_LOGIN_ATTEMPTS[key] if (now - t).seconds < 300]
     FAILED_LOGIN_ATTEMPTS[key].append(now)
@@ -120,13 +119,13 @@ def track_failed_login(username: str) -> bool:
 
 
 def clear_failed_login(username: str) -> None:
-    key = normalize_username(username)
+    key = username
     FAILED_LOGIN_ATTEMPTS.pop(key, None)
     LOCKED_UNTIL.pop(key, None)
 
 
 def is_locked_out(username: str) -> bool:
-    key = normalize_username(username)
+    key = username
     until = LOCKED_UNTIL.get(key)
     if until and datetime.datetime.now() < until:
         return True
@@ -182,7 +181,7 @@ def login() -> Optional[Dict[str, str]]:
         print("Account temporarily locked. Try again later.")
         return None
 
-    if normalize_username(username) == SUPER_USERNAME:
+    if username == SUPER_USERNAME:
         if password == SUPER_PASSWORD:
             clear_failed_login(username)
             user = {"id": None, "username": SUPER_USERNAME, "role": ROLE_SUPER}

@@ -29,7 +29,8 @@ def update_profile(user_id: int, first_name: str, last_name: str) -> None:
 
 
 def generate_employee_id(user_id: int) -> str:
-    return str(1000 + user_id)
+    result = str(1000 + user_id)
+    return result
 
 
 def create_employee(user_id: int, data: Dict[str, str]) -> str:
@@ -95,22 +96,23 @@ def get_employee_by_user_id(user_id: int) -> Optional[Dict[str, str]]:
         """,
         (user_id,),
     )
-    if not row:
-        return None
-    return {
-        "employee_id": decrypt_text(row[0]),
-        "birthday": decrypt_text(row[1]),
-        "gender": decrypt_text(row[2]),
-        "street": decrypt_text(row[3]),
-        "house_number": decrypt_text(row[4]),
-        "zip": decrypt_text(row[5]),
-        "city": decrypt_text(row[6]),
-        "email": decrypt_text(row[7]),
-        "mobile": decrypt_text(row[8]),
-        "id_doc_type": decrypt_text(row[9]),
-        "id_doc_number": decrypt_text(row[10]),
-        "bsn": decrypt_text(row[11]),
-    }
+    result = None
+    if row:
+        result = {
+            "employee_id": decrypt_text(row[0]),
+            "birthday": decrypt_text(row[1]),
+            "gender": decrypt_text(row[2]),
+            "street": decrypt_text(row[3]),
+            "house_number": decrypt_text(row[4]),
+            "zip": decrypt_text(row[5]),
+            "city": decrypt_text(row[6]),
+            "email": decrypt_text(row[7]),
+            "mobile": decrypt_text(row[8]),
+            "id_doc_type": decrypt_text(row[9]),
+            "id_doc_number": decrypt_text(row[10]),
+            "bsn": decrypt_text(row[11]),
+        }
+    return result
 
 
 def list_employee_records() -> List[Dict[str, str]]:

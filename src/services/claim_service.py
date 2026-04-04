@@ -10,7 +10,7 @@ APPROVAL_REJECTED = "Rejected"
 
 
 def create_claim(employee_user_id: int, data: Dict[str, str]) -> int:
-    return execute_insert(
+    claim_id = execute_insert(
         """
         INSERT INTO claims (
             employee_user_id, claim_date_enc, project_number_enc, claim_type_enc,
@@ -31,10 +31,11 @@ def create_claim(employee_user_id: int, data: Dict[str, str]) -> int:
             encrypt_text(APPROVAL_PENDING),
         ),
     )
+    return claim_id
 
 
 def _decrypt_claim_row(row) -> Dict[str, str]:
-    return {
+    result = {
         "id": row[0],
         "employee_user_id": row[1],
         "claim_date": decrypt_text(row[2]),
@@ -49,6 +50,7 @@ def _decrypt_claim_row(row) -> Dict[str, str]:
         "approved_by": decrypt_text(row[11]),
         "salary_batch": decrypt_text(row[12]),
     }
+    return result
 
 
 def get_claim_by_id(claim_id: int) -> Optional[Dict[str, str]]:
@@ -61,9 +63,10 @@ def get_claim_by_id(claim_id: int) -> Optional[Dict[str, str]]:
         """,
         (claim_id,),
     )
-    if not row:
-        return None
-    return _decrypt_claim_row(row)
+    result = None
+    if row:
+        result = _decrypt_claim_row(row)
+    return result
 
 
 def list_claims_by_employee(employee_user_id: int) -> List[Dict[str, str]]:
@@ -76,7 +79,8 @@ def list_claims_by_employee(employee_user_id: int) -> List[Dict[str, str]]:
         """,
         (employee_user_id,),
     )
-    return [_decrypt_claim_row(row) for row in rows]
+    results = [_decrypt_claim_row(row) for row in rows]
+    return results
 
 
 def list_all_claims() -> List[Dict[str, str]]:
@@ -88,11 +92,13 @@ def list_all_claims() -> List[Dict[str, str]]:
         FROM claims
         """,
     )
-    return [_decrypt_claim_row(row) for row in rows]
+    results = [_decrypt_claim_row(row) for row in rows]
+    return results
 
 
 def update_claim_employee(claim_id: int, employee_user_id: int, data: Dict[str, str]) -> bool:
     claim = get_claim_by_id(claim_id)
+    success = False
     if claim and claim["employee_user_id"] == employee_user_id and not claim.get("salary_batch"):
         new_type = data.get("claim_type", claim.get("claim_type", ""))
         clear_travel = new_type == "Home Office"
@@ -114,20 +120,22 @@ def update_claim_employee(claim_id: int, employee_user_id: int, data: Dict[str, 
                 claim_id,
             ),
         )
-        return True
-    return False
+        success = True
+    return success
 
 
 def delete_claim_employee(claim_id: int, employee_user_id: int) -> bool:
     claim = get_claim_by_id(claim_id)
+    success = False
     if claim and claim["employee_user_id"] == employee_user_id and not claim.get("salary_batch"):
         execute("DELETE FROM claims WHERE id = ?", (claim_id,))
-        return True
-    return False
+        success = True
+    return success
 
 
 def manager_modify_claim(claim_id: int, data: Dict[str, str]) -> bool:
     claim = get_claim_by_id(claim_id)
+    success = False
     if claim:
         execute(
             """
@@ -139,12 +147,13 @@ def manager_modify_claim(claim_id: int, data: Dict[str, str]) -> bool:
                 claim_id,
             ),
         )
-        return True
-    return False
+        success = True
+    return success
 
 
 def set_approval(claim_id: int, status: str, approved_by: str, salary_batch: str) -> bool:
     claim = get_claim_by_id(claim_id)
+    success = False
     if claim:
         execute(
             """
@@ -158,5 +167,5 @@ def set_approval(claim_id: int, status: str, approved_by: str, salary_batch: str
                 claim_id,
             ),
         )
-        return True
-    return False
+        success = True
+    return success

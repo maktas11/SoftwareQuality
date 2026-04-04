@@ -17,9 +17,6 @@ CITY_OPTIONS = [
 ]
 
 
-def normalize_username(username: str) -> str:
-    return username.lower()
-
 
 def validate_username(username: str) -> Tuple[bool, str]:
     pattern = r"^(?=.{8,10}$)[A-Za-z_](?:[A-Za-z0-9_]|[ '\-](?=[A-Za-z]))*$"
