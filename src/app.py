@@ -270,6 +270,7 @@ def notify_unread_suspicious(user: Dict[str, str]) -> None:
     count = count_unread_suspicious(last_read)
     if count > 0:
         print(f"WARNING: {count} unread suspicious log entries.")
+        pause()
 
 
 def handle_view_logs(user: Dict[str, str]) -> None:
