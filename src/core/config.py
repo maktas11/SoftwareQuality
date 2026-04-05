@@ -5,7 +5,7 @@ import os
 # The encryption key (secret.key) is the most critical file — whoever has
 # it can decrypt everything in the database and logs.
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DATA_DIR = os.path.join(PROJECT_ROOT, "data")
+DATA_DIR = os.path.join(PROJECT_ROOT, "src/data")
 DB_PATH = os.path.join(DATA_DIR, "app.db")
 LOG_PATH = os.path.join(DATA_DIR, "logs.enc")    # encrypted log entries
 KEY_PATH = os.path.join(DATA_DIR, "secret.key")   # Fernet master key
