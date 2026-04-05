@@ -102,16 +102,13 @@ def list_all_claims() -> List[Dict[str, str]]:
 def update_claim_employee(claim_id: int, employee_user_id: int, data: Dict[str, str]) -> bool:
     # Authorization check: employee can only update their OWN claims.
     # We verify employee_user_id matches the claim's owner at the service level.
-    # Also blocked if the claim already has a salary_batch (processed/paid out)
-    # or if the approval status is not "Pending" — once a manager has approved
-    # or rejected a claim, the employee shouldn't be able to silently change it.
+    # Also blocked if the claim already has a salary_batch (processed/paid out).
     claim = get_claim_by_id(claim_id)
     success = False
     if (
         claim
         and claim["employee_user_id"] == employee_user_id
         and not claim.get("salary_batch")
-        and claim.get("approval_status") == APPROVAL_PENDING
     ):
         new_type = data.get("claim_type", claim.get("claim_type", ""))
         clear_travel = new_type == "Home Office"
@@ -138,15 +135,14 @@ def update_claim_employee(claim_id: int, employee_user_id: int, data: Dict[str, 
 
 
 def delete_claim_employee(claim_id: int, employee_user_id: int) -> bool:
-    # Same checks as update — ownership, no salary_batch, and must still be "Pending".
-    # Can't delete a claim that a manager already reviewed.
+    # Same checks as update — ownership and no salary_batch.
+    # Can't delete a claim that has already been processed in a salary batch.
     claim = get_claim_by_id(claim_id)
     success = False
     if (
         claim
         and claim["employee_user_id"] == employee_user_id
         and not claim.get("salary_batch")
-        and claim.get("approval_status") == APPROVAL_PENDING
     ):
         execute("DELETE FROM claims WHERE id = ?", (claim_id,))
         success = True

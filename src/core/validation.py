@@ -35,7 +35,7 @@ def validate_username(username: str) -> Tuple[bool, str]:
     # Whitelist regex: 8-10 chars, must start with letter or underscore.
     # Only allows a-z, 0-9, _, apostrophe, period — no special SQL/HTML chars.
     # The null check (username truthy) also blocks null-byte injection.
-    pattern = r"^(?=.{8,10}$)[A-Za-z_](?:[A-Za-z0-9_]|[ '\-](?=[A-Za-z]))*$"
+    pattern = r"^[A-Za-z_][A-Za-z0-9_'.]{7,9}$"
     if username and re.match(pattern, username):
         return True, ""
     return False, "Username format is invalid."
@@ -149,7 +149,7 @@ def format_mobile(value: str) -> str:
 def validate_id_doc_number(value: str) -> Tuple[bool, str]:
     # Accepts two formats: XX123456 (passport) or X1234567 (ID card).
     # Only letters and digits in a fixed structure — no room for injection.
-    if re.match(r"^(?:[A-Z]{2}\d{6}|[A-Z]{1}\d{7})$", value, flags=re.IGNORECASE):
+    if re.match(r"^(?:[A-Z]{2}\d{7}|[A-Z]{1}\d{8})$", value, flags=re.IGNORECASE):
         return True, ""
     return False, "Identity number format invalid."
 
@@ -174,9 +174,9 @@ def validate_bsn(value: str) -> Tuple[bool, str]:
 
 
 def validate_project_number(value: str) -> Tuple[bool, str]:
-    if re.match(r"^[1-9]\d{1,9}$", value):
+    if re.match(r"^\d{2,10}$", value):
         return True, ""
-    return False, "Project number must be 2-10 digits (no leading zeros)."
+    return False, "Project number must be 2-10 digits."
 
 
 def validate_travel_distance(value: str) -> Tuple[bool, str]:

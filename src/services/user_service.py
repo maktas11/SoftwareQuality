@@ -12,6 +12,8 @@ def create_user(username: str, password: str, role: str) -> int:
     # never store the actual password, not even in encrypted form.
     # The UNIQUE constraint on username_hash prevents duplicate usernames
     # at the database level (defense in depth — we also check in the UI).
+    # Usernames are case-insensitive: lowercased before hashing and storing.
+    username = username.lower()
     username_hash = deterministic_hash(username)
     created_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     try:
@@ -40,7 +42,7 @@ def create_user(username: str, password: str, role: str) -> int:
 
 def username_exists(username: str) -> bool:
     # Lookup by HMAC hash — we never put the plaintext username in a SQL query.
-    row = fetch_one("SELECT id FROM users WHERE username_hash = ?", (deterministic_hash(username),))
+    row = fetch_one("SELECT id FROM users WHERE username_hash = ?", (deterministic_hash(username.lower()),))
     result = row is not None
     return result
 
@@ -51,7 +53,7 @@ def get_user_by_username(username: str) -> Optional[Dict[str, str]]:
         SELECT id, username_enc, password_hash, role_enc, last_log_read_at_enc, session_version
         FROM users WHERE username_hash = ?
         """,
-        (deterministic_hash(username),),
+        (deterministic_hash(username.lower()),),
     )
     result = None
     if row:

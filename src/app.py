@@ -1,10 +1,13 @@
 import datetime
 import os
+import secrets
+import string
 from typing import Dict, List, Optional
 
 from core import backup
 from core.auth import ROLE_EMPLOYEE, ROLE_MANAGER, ROLE_SUPER, has_permission
 from core.config import DATA_DIR, ensure_data_dirs
+from core.crypto import encrypt_text, decrypt_text
 from core.db import DatabaseOperationError, init_db
 from core.logging_utils import (
     append_log,
@@ -62,7 +65,7 @@ HOUSE_HINT = "1-6 digits"
 ZIP_HINT = "DDDDXX"
 EMAIL_HINT = "name@domain.tld"
 MOBILE_HINT = "8 digits"
-ID_DOC_HINT = "AA123456 or A1234567"
+ID_DOC_HINT = "AA1234567 or A12345678"
 BSN_HINT = "9 digits"
 PROJECT_HINT = "2-10 digits"
 CLAIM_TYPE_HINT = "Travel or Home Office"
@@ -75,7 +78,21 @@ SALARY_HINT = "YYYY-MM"
 FAILED_LOGIN_ATTEMPTS: Dict[str, List[datetime.datetime]] = {}
 LOCKED_UNTIL: Dict[str, datetime.datetime] = {}
 FORCE_LOGOUT_AFTER_RESTORE = False
-RESTORE_NOTICE_PATH = os.path.join(DATA_DIR, "last_restore_notice.txt")
+RESTORE_NOTICE_PATH = os.path.join(DATA_DIR, "last_restore_notice.enc")
+
+
+def generate_temp_password() -> str:
+    special = "~!@#$%&_-+="
+    parts = [
+        secrets.choice(string.ascii_lowercase),
+        secrets.choice(string.ascii_uppercase),
+        secrets.choice(string.digits),
+        secrets.choice(special),
+    ]
+    alphabet = string.ascii_letters + string.digits + special
+    parts += [secrets.choice(alphabet) for _ in range(8)]
+    secrets.SystemRandom().shuffle(parts)
+    return ''.join(parts)
 
 
 def log_action(user: Dict[str, str], description: str, info: str = "", suspicious: bool = False) -> None:
@@ -165,17 +182,17 @@ def confirm_restore_risk() -> bool:
 
 
 def set_restore_notice(timestamp: str) -> None:
-    with open(RESTORE_NOTICE_PATH, "w", encoding="utf-8") as handle:
-        handle.write(timestamp)
+    with open(RESTORE_NOTICE_PATH, "wb") as handle:
+        handle.write(encrypt_text(timestamp))
 
 
 def get_restore_notice() -> str:
     if not os.path.exists(RESTORE_NOTICE_PATH):
         return ""
     try:
-        with open(RESTORE_NOTICE_PATH, "r", encoding="utf-8") as handle:
-            return handle.read().strip()
-    except OSError:
+        with open(RESTORE_NOTICE_PATH, "rb") as handle:
+            return decrypt_text(handle.read())
+    except (OSError, Exception):
         return ""
 
 
@@ -204,6 +221,7 @@ def login() -> Optional[Dict[str, str]]:
     username = prompt_text("Username: ")
     if username == "exit":
         return "EXIT"
+    username = username.lower()
     # Password input is masked using getpass — characters are not echoed to screen.
     password = prompt_password("Password: ")
 
@@ -419,8 +437,14 @@ def employee_menu(user: Dict[str, str]) -> None:
         elif choice == "4":
             if not ensure_permission(user, "claim.search_own"):
                 continue
+            term = prompt_text("Search term (or Enter to list all): ")
             claims = claim_service.list_claims_by_employee(user["id"])
-            log_action(user, "Search claims", "scope: own")
+            if term:
+                claims = [
+                    c for c in claims
+                    if term.lower() in " ".join(str(v) for v in c.values()).lower()
+                ]
+            log_action(user, "Search claims", f"term: {term}" if term else "scope: own")
             display_claims(claims)
             pause()
         elif choice == "5":
@@ -537,7 +561,7 @@ def manager_menu(user: Dict[str, str]) -> None:
             # Temporary password for reset — shown once and must be changed by the user.
             # update_password also bumps session_version, kicking the employee out
             # of any active session immediately.
-            temp_pw = "Temp_" + datetime.datetime.now().strftime("%H%M%S")
+            temp_pw = generate_temp_password()
             user_service.update_password(target["id"], temp_pw)
             log_action(user, "Employee password reset", f"username: {username}")
             print(f"Temporary password: {temp_pw}")
@@ -759,7 +783,7 @@ def super_menu(user: Dict[str, str]) -> None:
                 print("User is not a manager.")
                 pause()
                 continue
-            temp_pw = "Temp_" + datetime.datetime.now().strftime("%H%M%S")
+            temp_pw = generate_temp_password()
             user_service.update_password(target["id"], temp_pw)
             log_action(user, "Manager password reset", f"username: {username}")
             print(f"Temporary password: {temp_pw}")
