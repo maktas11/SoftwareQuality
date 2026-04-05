@@ -229,8 +229,9 @@ def login() -> Optional[Dict[str, str]]:
     # the password if the account is locked, to prevent timing-based info leaks.
     if is_locked_out(username):
         log_action({"username": username}, "Login locked", "Too many attempts", True)
-        print("Account temporarily locked. Try again later.")
-        return None
+        print("Account temporarily locked. The application will now close.")
+        pause()
+        return "EXIT"
 
     # Super admin uses hardcoded credentials (assignment requirement).
     if username == SUPER_USERNAME:
