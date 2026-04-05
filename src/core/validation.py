@@ -110,7 +110,7 @@ def validate_house_number(value: str) -> Tuple[bool, str]:
 def validate_zip(value: str) -> Tuple[bool, str]:
     # Dutch ZIP format: exactly 4 digits followed by 2 uppercase letters.
     # Strict pattern means no spaces, no extra chars — prevents injection.
-    if re.match(r"^\d{4}[A-Z]{2}$", value, flags=re.IGNORECASE):
+    if re.match(r"^\d{4}[A-Z]{2}$", value):
         return True, ""
     return False, "ZIP code must be DDDDXX."
 
@@ -149,7 +149,7 @@ def format_mobile(value: str) -> str:
 def validate_id_doc_number(value: str) -> Tuple[bool, str]:
     # Accepts two formats: XX123456 (passport) or X1234567 (ID card).
     # Only letters and digits in a fixed structure — no room for injection.
-    if re.match(r"^(?:[A-Z]{2}\d{7}|[A-Z]{1}\d{8})$", value, flags=re.IGNORECASE):
+    if re.match(r"^(?:[A-Z]{2}\d{7}|[A-Z]{1}\d{8})$", value):
         return True, ""
     return False, "Identity number format invalid."
 

@@ -301,7 +301,7 @@ def prompt_employee_data() -> Dict[str, str]:
         "gender": prompt_until_valid("Gender (male/female): ", validate_gender, hint=GENDER_HINT),
         "street": prompt_until_valid("Street name: ", validate_street, hint=STREET_HINT),
         "house_number": prompt_until_valid("House number: ", validate_house_number, hint=HOUSE_HINT),
-        "zip": prompt_until_valid("ZIP code (DDDDXX): ", validate_zip, hint=ZIP_HINT).upper(),
+        "zip": prompt_until_valid("ZIP code (DDDDXX): ", validate_zip, hint=ZIP_HINT),
         "city": prompt_choice(
             "City (choose number): "
             + " ".join([f"{idx + 1}:{name}" for idx, name in enumerate(CITY_OPTIONS)])
@@ -311,7 +311,7 @@ def prompt_employee_data() -> Dict[str, str]:
         "email": prompt_until_valid("Email: ", validate_email, hint=EMAIL_HINT),
         "mobile": format_mobile(prompt_until_valid("Mobile (8 digits): ", validate_mobile, hint=MOBILE_HINT)),
         "id_doc_type": doc_type,
-        "id_doc_number": prompt_until_valid("Document Number: ", validate_id_doc_number, hint=ID_DOC_HINT).upper(),
+        "id_doc_number": prompt_until_valid("Document Number: ", validate_id_doc_number, hint=ID_DOC_HINT),
         "bsn": prompt_until_valid("BSN (9 digits): ", validate_bsn, hint=BSN_HINT),
     }
     return data
@@ -329,9 +329,9 @@ def prompt_claim_data() -> Dict[str, str]:
                 "travel_distance": prompt_until_valid(
                     "Travel distance (km): ", validate_travel_distance, hint=TRAVEL_HINT
                 ),
-                "from_zip": prompt_until_valid("From ZIP (DDDDXX): ", validate_zip, hint=ZIP_HINT).upper(),
+                "from_zip": prompt_until_valid("From ZIP (DDDDXX): ", validate_zip, hint=ZIP_HINT),
                 "from_house": prompt_until_valid("From house number: ", validate_house_number, hint=HOUSE_HINT),
-                "to_zip": prompt_until_valid("To ZIP (DDDDXX): ", validate_zip, hint=ZIP_HINT).upper(),
+                "to_zip": prompt_until_valid("To ZIP (DDDDXX): ", validate_zip, hint=ZIP_HINT),
                 "to_house": prompt_until_valid("To house number: ", validate_house_number, hint=HOUSE_HINT),
             }
         )
