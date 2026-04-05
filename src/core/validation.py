@@ -69,19 +69,22 @@ def validate_name(value: str) -> Tuple[bool, str]:
 
 
 def validate_street(value: str) -> Tuple[bool, str]:
-    if value and re.match(r"^[A-Za-z0-9](?:[A-Za-z0-9]|[ '\-](?=[A-Za-z0-9])){1,79}$", value):
+    if value and re.match(r"^[A-Za-z](?:[A-Za-z0-9]|[ '\-](?=[A-Za-z0-9])){1,79}$", value):
         return True, ""
-    return False, "Street contains invalid characters."
+    return False, "Street must start with a letter. 2-80 chars allowed."
 
 
 def validate_date(value: str) -> Tuple[bool, str]:
     try:
         date_value = datetime.datetime.strptime(value, "%Y-%m-%d").date()
-        if datetime.date(1920, 1, 1) <= date_value <= datetime.date.today():
+        today = datetime.date.today()
+        min_birth = today.replace(year=today.year - 100)
+        max_birth = today.replace(year=today.year - 16)
+        if min_birth <= date_value <= max_birth:
             return True, ""
     except ValueError:
         pass
-    return False, "Date must be YYYY-MM-DD and between 1920 and today."
+    return False, "Date must be YYYY-MM-DD. Employee must be 16-100 years old."
 
 
 def validate_claim_date(value: str) -> Tuple[bool, str]:
@@ -107,17 +110,17 @@ def validate_gender(value: str) -> Tuple[bool, str]:
 
 
 def validate_house_number(value: str) -> Tuple[bool, str]:
-    if re.match(r"^(?:0|[1-9]\d{0,5})$", value):
+    if re.match(r"^[1-9]\d{0,2}$", value):
         return True, ""
-    return False, "House number must be digits only."
+    return False, "House number must be 1-999."
 
 
 def validate_zip(value: str) -> Tuple[bool, str]:
     # Dutch ZIP format: exactly 4 digits followed by 2 uppercase letters.
     # Strict pattern means no spaces, no extra chars — prevents injection.
-    if re.match(r"^\d{4}[A-Z]{2}$", value):
+    if re.match(r"^[1-9]\d{3}[A-Z]{2}$", value):
         return True, ""
-    return False, "ZIP code must be DDDDXX."
+    return False, "ZIP code must be DDDDXX (first digit non-zero)."
 
 
 def validate_city(value: str) -> Tuple[bool, str]:
@@ -133,18 +136,18 @@ def validate_email(value: str) -> Tuple[bool, str]:
     # of the domain, which are common in malformed injection payloads.
     # Length is implicitly limited by the pattern structure.
     if re.match(
-        r"^(?!.*\.\.)(?!.*@\.)[A-Za-z0-9](?:[A-Za-z0-9._%+-]{0,62}[A-Za-z0-9])?@"
-        r"(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,}$",
+        r"^(?!.*\.\.)(?!.*@\.)[A-Za-z](?:[A-Za-z0-9._%+-]{0,62}[A-Za-z0-9])?@"
+        r"(?:[A-Za-z](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,}$",
         value,
     ):
         return True, ""
-    return False, "Email format invalid."
+    return False, "Email must start with a letter and have a valid domain."
 
 
 def validate_mobile(value: str) -> Tuple[bool, str]:
-    if re.match(r"^\d{8}$", value):
+    if re.match(r"^[1-9]\d{7}$", value):
         return True, ""
-    return False, "Mobile number must be 8 digits."
+    return False, "Mobile must be 8 digits, first digit non-zero."
 
 
 def format_mobile(value: str) -> str:
