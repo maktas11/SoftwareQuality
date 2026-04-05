@@ -46,9 +46,12 @@ def validate_password(password: str) -> Tuple[bool, str]:
     # must contain lowercase + uppercase + digit + special character.
     # The max length of 50 prevents denial-of-service through extremely
     # long passwords that would be expensive to hash with PBKDF2.
+    # Only characters from the spec-defined set are allowed (whitelist).
+    allowed_pattern = r"^[A-Za-z0-9~!@#$%&_\-+=`|\\(){}\[\]:;'<>,.?/]+$"
     checks = [
         password,                                                    # not empty / not None
         12 <= len(password) <= 50,                                   # length range
+        re.match(allowed_pattern, password),                         # only allowed chars
         re.search(r"[a-z]", password),                               # at least one lowercase
         re.search(r"[A-Z]", password),                               # at least one uppercase
         re.search(r"\d", password),                                  # at least one digit
@@ -73,10 +76,12 @@ def validate_street(value: str) -> Tuple[bool, str]:
 
 def validate_date(value: str) -> Tuple[bool, str]:
     try:
-        datetime.datetime.strptime(value, "%Y-%m-%d")
-        return True, ""
+        date_value = datetime.datetime.strptime(value, "%Y-%m-%d").date()
+        if datetime.date(1920, 1, 1) <= date_value <= datetime.date.today():
+            return True, ""
     except ValueError:
-        return False, "Date must be YYYY-MM-DD."
+        pass
+    return False, "Date must be YYYY-MM-DD and between 1920 and today."
 
 
 def validate_claim_date(value: str) -> Tuple[bool, str]:
@@ -168,15 +173,16 @@ def validate_int(value: str) -> Tuple[bool, str]:
 def validate_bsn(value: str) -> Tuple[bool, str]:
     # BSN (Dutch social security number) — exactly 9 digits, nothing else.
     # Strict digit-only pattern blocks any non-numeric injection attempts.
-    if re.match(r"^\d{9}$", value):
+    # All-zeros is rejected as it is not a valid BSN.
+    if re.match(r"^\d{9}$", value) and value != "000000000":
         return True, ""
-    return False, "BSN must be 9 digits."
+    return False, "BSN must be 9 digits and cannot be all zeros."
 
 
 def validate_project_number(value: str) -> Tuple[bool, str]:
-    if re.match(r"^\d{2,10}$", value):
+    if re.match(r"^[1-9]\d{1,9}$", value):
         return True, ""
-    return False, "Project number must be 2-10 digits."
+    return False, "Project number must be 2-10 digits, no leading zeros."
 
 
 def validate_travel_distance(value: str) -> Tuple[bool, str]:
@@ -192,9 +198,9 @@ def validate_claim_type(value: str) -> Tuple[bool, str]:
 
 
 def validate_salary_batch(value: str) -> Tuple[bool, str]:
-    if re.match(r"^\d{4}-(0[1-9]|1[0-2])$", value):
+    if re.match(r"^(20\d{2})-(0[1-9]|1[0-2])$", value):
         return True, ""
-    return False, "Salary batch must be YYYY-MM with month 01-12."
+    return False, "Salary batch must be YYYY-MM (year 2000-2099, month 01-12)."
 
 
 def validate_identity_doc_type(value: str) -> Tuple[bool, str]:
