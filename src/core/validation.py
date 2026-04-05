@@ -96,7 +96,7 @@ def validate_claim_date(value: str) -> Tuple[bool, str]:
 
 
 def validate_gender(value: str) -> Tuple[bool, str]:
-    if re.fullmatch(r"male|female", value, flags=re.IGNORECASE):
+    if re.fullmatch(r"male|female", value):
         return True, ""
     return False, "Gender must be male or female."
 
@@ -186,7 +186,7 @@ def validate_travel_distance(value: str) -> Tuple[bool, str]:
 
 
 def validate_claim_type(value: str) -> Tuple[bool, str]:
-    if re.fullmatch(r"travel|home office", value, flags=re.IGNORECASE):
+    if re.fullmatch(r"Travel|Home Office", value):
         return True, ""
     return False, "Claim type must be Travel or Home Office."
 
@@ -198,6 +198,6 @@ def validate_salary_batch(value: str) -> Tuple[bool, str]:
 
 
 def validate_identity_doc_type(value: str) -> Tuple[bool, str]:
-    if re.fullmatch(r"passport|id-card", value, flags=re.IGNORECASE):
+    if re.fullmatch(r"Passport|ID-Card", value):
         return True, ""
     return False, "Document type must be Passport or ID-Card."

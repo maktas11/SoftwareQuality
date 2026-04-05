@@ -296,10 +296,6 @@ def prompt_employee_data() -> Dict[str, str]:
     doc_type = prompt_until_valid(
         "Document Type (Passport/ID-Card): ", validate_identity_doc_type, hint=DOC_TYPE_HINT
     )
-    if doc_type.strip().lower() == "passport":
-        doc_type = "Passport"
-    else:
-        doc_type = "ID-Card"
     data = {
         "birthday": prompt_until_valid("Birthday (YYYY-MM-DD): ", validate_date, hint=DATE_HINT),
         "gender": prompt_until_valid("Gender (male/female): ", validate_gender, hint=GENDER_HINT),
@@ -327,10 +323,6 @@ def prompt_claim_data() -> Dict[str, str]:
         "project_number": prompt_until_valid("Project number (2-10 digits): ", validate_project_number, hint=PROJECT_HINT),
         "claim_type": prompt_until_valid("Claim type (Travel/Home Office): ", validate_claim_type, hint=CLAIM_TYPE_HINT),
     }
-    if data["claim_type"].strip().lower() == "travel":
-        data["claim_type"] = "Travel"
-    else:
-        data["claim_type"] = "Home Office"
     if data["claim_type"] == "Travel":
         data.update(
             {
